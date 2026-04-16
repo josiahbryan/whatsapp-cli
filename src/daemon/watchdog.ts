@@ -38,10 +38,7 @@ export class Watchdog {
 			this.failures = 0;
 		} catch {
 			this.failures += 1;
-			if (
-				this.failures >= this.opts.failuresBeforeRecover &&
-				!this.recovering
-			) {
+			if (this.failures >= this.opts.failuresBeforeRecover && !this.recovering) {
 				this.recovering = true;
 				try {
 					await this.opts.recover();
@@ -57,10 +54,7 @@ export class Watchdog {
 
 	private withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
-			const t = setTimeout(
-				() => reject(new Error("watchdog timeout")),
-				ms,
-			);
+			const t = setTimeout(() => reject(new Error("watchdog timeout")), ms);
 			p.then(
 				(v) => {
 					clearTimeout(t);

@@ -24,8 +24,10 @@ export interface SentMessage {
 	reply_to_wa_id?: string;
 }
 
+type AnyListener = (...args: never[]) => void;
+
 export class FakeWhatsAppClient implements WhatsAppClient {
-	private listeners: { [K in keyof WaEventMap]?: Array<WaEventMap[K]> } = {};
+	private readonly listeners = new Map<keyof WaEventMap, AnyListener[]>();
 	private readonly history = new Map<string, WaMessageEvent[]>();
 	private readonly chatMeta = new Map<string, { kind: "dm" | "group" }>();
 	private pairingResolver: (() => void) | null = null;
@@ -37,21 +39,23 @@ export class FakeWhatsAppClient implements WhatsAppClient {
 	constructor(private readonly opts: FakeOptions = {}) {}
 
 	on<K extends keyof WaEventMap>(event: K, listener: WaEventMap[K]): void {
-		(this.listeners[event] ??= []).push(listener);
+		let arr = this.listeners.get(event);
+		if (!arr) {
+			arr = [];
+			this.listeners.set(event, arr);
+		}
+		arr.push(listener as AnyListener);
 	}
 
 	off<K extends keyof WaEventMap>(event: K, listener: WaEventMap[K]): void {
-		const arr = this.listeners[event];
+		const arr = this.listeners.get(event);
 		if (!arr) return;
-		const idx = arr.indexOf(listener);
+		const idx = arr.indexOf(listener as AnyListener);
 		if (idx >= 0) arr.splice(idx, 1);
 	}
 
-	private emit<K extends keyof WaEventMap>(
-		event: K,
-		...args: Parameters<WaEventMap[K]>
-	): void {
-		const arr = this.listeners[event];
+	private emit<K extends keyof WaEventMap>(event: K, ...args: Parameters<WaEventMap[K]>): void {
+		const arr = this.listeners.get(event);
 		if (!arr) return;
 		for (const l of [...arr]) (l as (...a: unknown[]) => void)(...args);
 	}
@@ -101,11 +105,9 @@ export class FakeWhatsAppClient implements WhatsAppClient {
 	}
 
 	async getChatById(chat_id: string): Promise<ChatHandle> {
-		const meta =
-			this.chatMeta.get(chat_id) ??
-			({
-				kind: chat_id.endsWith("@g.us") ? ("group" as const) : ("dm" as const),
-			});
+		const meta = this.chatMeta.get(chat_id) ?? {
+			kind: chat_id.endsWith("@g.us") ? ("group" as const) : ("dm" as const),
+		};
 		return {
 			id: chat_id,
 			kind: meta.kind,
@@ -117,16 +119,10 @@ export class FakeWhatsAppClient implements WhatsAppClient {
 	}
 
 	async listChats(): Promise<ChatHandle[]> {
-		return Promise.all(
-			Array.from(this.chatMeta.keys()).map((id) => this.getChatById(id)),
-		);
+		return Promise.all(Array.from(this.chatMeta.keys()).map((id) => this.getChatById(id)));
 	}
 
-	async sendText(
-		chat_id: string,
-		text: string,
-		opts: SendTextOpts = {},
-	): Promise<SendResult> {
+	async sendText(chat_id: string, text: string, opts: SendTextOpts = {}): Promise<SendResult> {
 		this.sendCounter += 1;
 		this.sentMessages.push({
 			chat_id,
@@ -152,6 +148,6 @@ export class FakeWhatsAppClient implements WhatsAppClient {
 
 	async destroy(): Promise<void> {
 		this.destroyed = true;
-		this.listeners = {};
+		this.listeners.clear();
 	}
 }
