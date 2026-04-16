@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { openDatabase } from "../storage/db.js";
 import { listMessagesByChat } from "../storage/messages.js";
+import { parseIntOrUndefined, parsePositiveInt } from "../util/args.js";
 import { normalizeChatId } from "../util/chat-id.js";
 import { envelopeOk, formatEnvelope } from "../util/json.js";
 import { accountPaths } from "../util/paths.js";
@@ -43,9 +44,9 @@ export async function run(args: Args, flags: GlobalFlags): Promise<void> {
 		const chatId = resolveChatId(db, args.chat);
 		const rows = listMessagesByChat(db, {
 			chat_id: chatId,
-			limit: args.limit ? Math.max(1, Number.parseInt(args.limit, 10)) : 50,
-			before_rowid: args.before ? Number.parseInt(args.before, 10) : undefined,
-			since_rowid: args.since ? Number.parseInt(args.since, 10) : undefined,
+			limit: parsePositiveInt(args.limit, 50),
+			before_rowid: parseIntOrUndefined(args.before),
+			since_rowid: parseIntOrUndefined(args.since),
 			from_ts: args.from ? parseTime(args.from) : undefined,
 			to_ts: args.to ? parseTime(args.to) : undefined,
 		});

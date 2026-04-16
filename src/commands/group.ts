@@ -1,6 +1,7 @@
 import { listChats } from "../storage/chats.js";
 import { openDatabase } from "../storage/db.js";
 import { getGroupParticipants } from "../storage/groups.js";
+import { NotFoundError } from "../util/errors.js";
 import { envelopeError, envelopeOk, formatEnvelope } from "../util/json.js";
 import { accountPaths } from "../util/paths.js";
 import type { GlobalFlags } from "./types.js";
@@ -17,7 +18,7 @@ export async function run(args: Args, flags: GlobalFlags): Promise<void> {
 		const chat = listChats(db, {}).find((c) => c.id === chatId);
 		if (!chat || chat.kind !== "group") {
 			process.stdout.write(formatEnvelope(envelopeError("not_found", `no group for ${args.chat}`)));
-			process.exit(4);
+			throw new NotFoundError(`no group for ${args.chat}`);
 		}
 		const participants = getGroupParticipants(db, chatId);
 		const admins = participants.filter((p) => p.is_admin === 1).map((p) => p.contact_id);

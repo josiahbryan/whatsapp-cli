@@ -78,7 +78,8 @@ describe("search command", () => {
 			expect(env.data).toHaveLength(1);
 			expect(env.data[0].snippet).toContain("widget");
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});

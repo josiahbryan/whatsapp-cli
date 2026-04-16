@@ -71,7 +71,8 @@ describe("history command", () => {
 			const env = JSON.parse(out);
 			expect(env.data).toHaveLength(5);
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});
@@ -86,7 +87,8 @@ describe("history command", () => {
 			const env = JSON.parse(out);
 			expect(env.data).toHaveLength(2);
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});
@@ -104,7 +106,8 @@ describe("history command", () => {
 			const env = JSON.parse(out);
 			expect(env.data.length).toBeGreaterThan(0);
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});

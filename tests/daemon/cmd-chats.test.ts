@@ -54,7 +54,8 @@ describe("chats command", () => {
 			expect(env.data).toHaveLength(2);
 			expect(env.data[0].id).toBe("b@g.us");
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});
@@ -70,7 +71,8 @@ describe("chats command", () => {
 			expect(env.data).toHaveLength(1);
 			expect(env.data[0].id).toBe("a@c.us");
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});
@@ -86,7 +88,8 @@ describe("chats command", () => {
 			expect(lines).toHaveLength(2);
 			expect(lines[0]?.split("\t")).toContain("Team");
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});

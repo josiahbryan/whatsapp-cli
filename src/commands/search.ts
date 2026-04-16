@@ -1,7 +1,9 @@
 import { openDatabase } from "../storage/db.js";
 import { searchMessages } from "../storage/search.js";
+import { parsePositiveInt } from "../util/args.js";
 import { normalizeChatId } from "../util/chat-id.js";
-import { envelopeOk, formatEnvelope } from "../util/json.js";
+import { InvalidArgsError, InvalidQueryError } from "../util/errors.js";
+import { envelopeError, envelopeOk, formatEnvelope } from "../util/json.js";
 import { accountPaths } from "../util/paths.js";
 import { parseTime } from "../util/time.js";
 import type { GlobalFlags } from "./types.js";
@@ -14,15 +16,29 @@ interface Args {
 }
 
 export async function run(args: Args, flags: GlobalFlags): Promise<void> {
+	const query = args.query?.trim();
+	if (!query) {
+		process.stdout.write(formatEnvelope(envelopeError("invalid_args", "search query is required")));
+		throw new InvalidArgsError("search query is required");
+	}
 	const paths = accountPaths(flags.account);
 	const db = openDatabase(paths.db, { readonly: true });
 	try {
-		const hits = searchMessages(db, {
-			query: args.query,
-			chat_id: args.chat ? normalizeChatId(args.chat) : undefined,
-			since_ts: args.from ? parseTime(args.from) : undefined,
-			limit: args.limit ? Math.max(1, Number.parseInt(args.limit, 10)) : 50,
-		});
+		let hits: ReturnType<typeof searchMessages>;
+		try {
+			hits = searchMessages(db, {
+				query,
+				chat_id: args.chat ? normalizeChatId(args.chat) : undefined,
+				since_ts: args.from ? parseTime(args.from) : undefined,
+				limit: parsePositiveInt(args.limit, 50),
+			});
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			process.stdout.write(
+				formatEnvelope(envelopeError("invalid_query", `invalid search query: ${msg}`)),
+			);
+			throw new InvalidQueryError(msg);
+		}
 		if (flags.json) {
 			process.stdout.write(formatEnvelope(envelopeOk(hits, { count: hits.length })));
 			return;

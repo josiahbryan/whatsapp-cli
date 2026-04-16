@@ -81,7 +81,8 @@ describe("show command", () => {
 			expect(env.data.reactions).toHaveLength(1);
 			expect(env.data.quoted?.body).toBe("original");
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});
@@ -113,7 +114,8 @@ describe("show command", () => {
 			expect(env.data.quoted).toBeNull();
 			expect(env.data.quoted_wa_id).toBe("missing");
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});
@@ -129,7 +131,8 @@ describe("show command", () => {
 			expect(env.success).toBe(false);
 			expect(env.error.code).toBe("not_found");
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});

@@ -1,21 +1,13 @@
 import { openDatabase } from "../storage/db.js";
 import { getMessageByWaId } from "../storage/messages.js";
 import { listReactionsForMessage } from "../storage/reactions.js";
+import { NotFoundError } from "../util/errors.js";
 import { envelopeError, envelopeOk, formatEnvelope } from "../util/json.js";
 import { accountPaths } from "../util/paths.js";
 import type { GlobalFlags } from "./types.js";
 
 interface Args {
 	waId: string;
-}
-
-class NotFoundError extends Error {
-	code = "not_found";
-	exitCode = 4;
-	constructor(msg: string) {
-		super(msg);
-		this.name = "NotFoundError";
-	}
 }
 
 export async function run(args: Args, flags: GlobalFlags): Promise<void> {

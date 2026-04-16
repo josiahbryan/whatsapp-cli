@@ -97,7 +97,8 @@ describe("contacts/who/group/cursor", () => {
 			const env = JSON.parse(out);
 			expect(env.data).toHaveLength(2);
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});
@@ -112,7 +113,8 @@ describe("contacts/who/group/cursor", () => {
 			const env = JSON.parse(out);
 			expect(env.data.pushname).toBe("Alice");
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});
@@ -128,7 +130,8 @@ describe("contacts/who/group/cursor", () => {
 			expect(env.data.participants).toHaveLength(2);
 			expect(env.data.admins).toEqual(["111@c.us"]);
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});
@@ -141,7 +144,8 @@ describe("contacts/who/group/cursor", () => {
 			const env = JSON.parse(out);
 			expect(env.data.rowid).toBe(1);
 		} finally {
-			process.env.WA_CLI_HOME = undefined;
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
 			cleanup();
 		}
 	});
