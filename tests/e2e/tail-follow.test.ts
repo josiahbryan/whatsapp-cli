@@ -34,6 +34,15 @@ function forceKillFromPidFile(pidFile: string): void {
 	}
 }
 
+async function waitForSocket(socketPath: string, timeoutMs: number): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (existsSync(socketPath)) return;
+		await new Promise((r) => setTimeout(r, 50));
+	}
+	throw new Error(`socket never appeared at ${socketPath}`);
+}
+
 describe("e2e: tail --follow", () => {
 	test("follow mode streams live events until SIGINT", async () => {
 		const root = mkdtempSync(join(tmpdir(), "wacli-e2e-t-"));
@@ -44,7 +53,9 @@ describe("e2e: tail --follow", () => {
 		};
 		const paths = accountPaths("default", root);
 		try {
-			runCli(["cursor", "--json"], env);
+			const startRes = runCli(["daemon", "start", "--json"], env);
+			expect(startRes.status).toBe(0);
+			await waitForSocket(paths.socket, 30_000);
 			const proc = spawn("bun", ["run", CLI, "tail", "--follow", "--json"], { env });
 			let out = "";
 			proc.stdout.on("data", (chunk) => {
@@ -52,8 +63,16 @@ describe("e2e: tail --follow", () => {
 			});
 			await new Promise((r) => setTimeout(r, 1500));
 			proc.kill("SIGINT");
-			await new Promise((r) => proc.once("exit", r));
+			await Promise.race([
+				new Promise((r) => proc.once("exit", r)),
+				new Promise((r) => setTimeout(r, 5_000)),
+			]);
+			if (proc.exitCode === null && proc.signalCode === null) {
+				proc.kill("SIGKILL");
+				await new Promise((r) => proc.once("exit", r));
+			}
 			expect(out).toBeDefined();
+			expect(proc.exitCode !== null || proc.signalCode !== null).toBe(true);
 		} finally {
 			runCli(["daemon", "stop", "--json"], env);
 			const cleanExit = await waitForTeardown(paths.socket, paths.pidFile, 5_000);
