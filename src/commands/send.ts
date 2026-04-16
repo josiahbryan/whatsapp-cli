@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { ensureDaemon } from "../ipc/auto-boot.js";
 import { normalizeChatId } from "../util/chat-id.js";
+import { CliError, InvalidArgsError } from "../util/errors.js";
 import { envelopeError, envelopeOk, formatEnvelope } from "../util/json.js";
 import { accountPaths } from "../util/paths.js";
 import type { GlobalFlags } from "./types.js";
@@ -40,7 +41,7 @@ export async function run(args: Args, flags: GlobalFlags): Promise<void> {
 			process.stdout.write(
 				formatEnvelope(envelopeError("invalid_args", "send requires text or --file")),
 			);
-			process.exit(1);
+			throw new InvalidArgsError("send requires text or --file");
 		}
 		if (args.reply) params.reply_to = args.reply;
 		try {
@@ -48,10 +49,10 @@ export async function run(args: Args, flags: GlobalFlags): Promise<void> {
 			process.stdout.write(formatEnvelope(envelopeOk(res)));
 		} catch (err) {
 			const e = err as { code?: string; message?: string };
-			process.stdout.write(
-				formatEnvelope(envelopeError(e.code ?? "error", e.message ?? String(err))),
-			);
-			process.exit(e.code === "not_ready" ? 2 : 1);
+			const code = e.code ?? "error";
+			const message = e.message ?? String(err);
+			process.stdout.write(formatEnvelope(envelopeError(code, message)));
+			throw new CliError(code, code === "not_ready" ? 2 : 1, message);
 		}
 	} finally {
 		await client.close();

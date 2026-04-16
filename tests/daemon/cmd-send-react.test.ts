@@ -60,6 +60,29 @@ describe("send command", () => {
 			expect(fake.sentMessages[0]?.text).toBe("hello");
 		});
 	});
+
+	test("send --file forwards file_path, caption, and reply_to", async () => {
+		await withRunningDaemon(async (_root, fake) => {
+			const out = await captureStdout(() =>
+				runSend(
+					{
+						chat: "+15551234567",
+						file: "/tmp/x.jpg",
+						caption: "look",
+						reply: "w1",
+					},
+					{ json: true, account: "default" },
+				),
+			);
+			const env = JSON.parse(out);
+			expect(env.success).toBe(true);
+			expect(env.data.wa_id).toMatch(/^fake-sent-/);
+			const sent = fake.sentMessages[0];
+			expect(sent?.media?.file_path).toBe("/tmp/x.jpg");
+			expect(sent?.media?.caption).toBe("look");
+			expect(sent?.reply_to_wa_id).toBe("w1");
+		});
+	});
 });
 
 describe("react command", () => {
