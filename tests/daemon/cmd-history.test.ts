@@ -12,12 +12,18 @@ function seed() {
 	const root = mkdtempSync(join(tmpdir(), "wacli-cmd-history-"));
 	const paths = accountPaths("default", root);
 	const db = openDatabase(paths.db);
-	upsertChat(db, { id: "a@c.us", kind: "dm", name: "Alice", phone: "111", updated_at: 0 });
+	upsertChat(db, {
+		id: "15551234567@c.us",
+		kind: "dm",
+		name: "Alice",
+		phone: "15551234567",
+		updated_at: 0,
+	});
 	for (let i = 1; i <= 5; i++) {
 		insertMessage(db, {
 			wa_id: `w${i}`,
-			chat_id: "a@c.us",
-			from_id: "111@c.us",
+			chat_id: "15551234567@c.us",
+			from_id: "15551234567@c.us",
 			from_name: "Alice",
 			from_me: 0,
 			timestamp: 1_700_000_000_000 + i * 1000,
@@ -60,7 +66,7 @@ describe("history command", () => {
 		try {
 			process.env.WA_CLI_HOME = root;
 			const out = await captureStdout(() =>
-				run({ chat: "+111", limit: "10" }, { json: true, account: "default" }),
+				run({ chat: "+15551234567", limit: "10" }, { json: true, account: "default" }),
 			);
 			const env = JSON.parse(out);
 			expect(env.data).toHaveLength(5);
@@ -75,7 +81,7 @@ describe("history command", () => {
 		try {
 			process.env.WA_CLI_HOME = root;
 			const out = await captureStdout(() =>
-				run({ chat: "a@c.us", limit: "2" }, { json: true, account: "default" }),
+				run({ chat: "15551234567@c.us", limit: "2" }, { json: true, account: "default" }),
 			);
 			const env = JSON.parse(out);
 			expect(env.data).toHaveLength(2);
@@ -91,7 +97,7 @@ describe("history command", () => {
 			process.env.WA_CLI_HOME = root;
 			const out = await captureStdout(() =>
 				run(
-					{ chat: "a@c.us", limit: "10", from: "2026-04-10T00:00:00Z" },
+					{ chat: "15551234567@c.us", limit: "10", from: "2020-01-01T00:00:00Z" },
 					{ json: true, account: "default" },
 				),
 			);

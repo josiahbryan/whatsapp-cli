@@ -5,8 +5,8 @@ export interface ChatInfo {
 	phone: string | null;
 }
 
-const PHONE_ONLY = /^\+?(\d+)$/;
-const WA_DM = /^([\w]+)@c\.us$/;
+const PHONE_ONLY = /^\+?(\d{6,15})$/;
+const WA_DM = /^(\d{6,15})@c\.us$/;
 const WA_GROUP = /^\d+@g\.us$/;
 
 export function normalizeChatId(input: string): string {

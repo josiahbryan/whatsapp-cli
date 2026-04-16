@@ -80,11 +80,11 @@ export function listMessagesByChat(db: Database, opts: ListByChatOpts): MessageR
 		params["@since_rowid"] = opts.since_rowid;
 	}
 	if (opts.from_ts !== undefined) {
-		where.push("timestamp <= @from_ts");
+		where.push("timestamp >= @from_ts");
 		params["@from_ts"] = opts.from_ts;
 	}
 	if (opts.to_ts !== undefined) {
-		where.push("timestamp >= @to_ts");
+		where.push("timestamp <= @to_ts");
 		params["@to_ts"] = opts.to_ts;
 	}
 	const sql =
