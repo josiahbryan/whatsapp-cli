@@ -1,5 +1,40 @@
+import { listChats } from "../storage/chats.js";
+import { openDatabase } from "../storage/db.js";
+import { getGroupParticipants } from "../storage/groups.js";
+import { envelopeError, envelopeOk, formatEnvelope } from "../util/json.js";
+import { accountPaths } from "../util/paths.js";
 import type { GlobalFlags } from "./types.js";
-export async function run(_args: Record<string, unknown>, _flags: GlobalFlags): Promise<void> {
-	process.stderr.write("not implemented\n");
-	process.exit(1);
+
+interface Args {
+	chat: string;
+}
+
+export async function run(args: Args, flags: GlobalFlags): Promise<void> {
+	const chatId = args.chat.trim();
+	const paths = accountPaths(flags.account);
+	const db = openDatabase(paths.db, { readonly: true });
+	try {
+		const chat = listChats(db, {}).find((c) => c.id === chatId);
+		if (!chat || chat.kind !== "group") {
+			process.stdout.write(formatEnvelope(envelopeError("not_found", `no group for ${args.chat}`)));
+			process.exit(4);
+		}
+		const participants = getGroupParticipants(db, chatId);
+		const admins = participants.filter((p) => p.is_admin === 1).map((p) => p.contact_id);
+		const out = {
+			id: chat.id,
+			name: chat.name,
+			participants,
+			admins,
+			participant_count: participants.length,
+		};
+		if (flags.json) {
+			process.stdout.write(formatEnvelope(envelopeOk(out)));
+			return;
+		}
+		process.stdout.write(`${chat.id}\t${chat.name ?? ""}\n`);
+		process.stdout.write(`participants: ${participants.length}\nadmins: ${admins.length}\n`);
+	} finally {
+		db.close();
+	}
 }

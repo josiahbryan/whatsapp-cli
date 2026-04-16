@@ -1,5 +1,36 @@
+import { getContact, getContactByPhone } from "../storage/contacts.js";
+import { openDatabase } from "../storage/db.js";
+import { envelopeError, envelopeOk, formatEnvelope } from "../util/json.js";
+import { accountPaths } from "../util/paths.js";
 import type { GlobalFlags } from "./types.js";
-export async function run(_args: Record<string, unknown>, _flags: GlobalFlags): Promise<void> {
-	process.stderr.write("not implemented\n");
-	process.exit(1);
+
+interface Args {
+	contact: string;
+}
+
+export async function run(args: Args, flags: GlobalFlags): Promise<void> {
+	const paths = accountPaths(flags.account);
+	const db = openDatabase(paths.db, { readonly: true });
+	try {
+		let row = args.contact.includes("@") ? getContact(db, args.contact) : null;
+		if (!row) {
+			const phone = args.contact.replace(/^\+/, "");
+			row = getContactByPhone(db, phone);
+		}
+		if (!row) {
+			process.stdout.write(
+				formatEnvelope(envelopeError("not_found", `no contact for ${args.contact}`)),
+			);
+			process.exit(4);
+		}
+		if (flags.json) {
+			process.stdout.write(formatEnvelope(envelopeOk(row)));
+			return;
+		}
+		process.stdout.write(
+			`${row.id}\nphone: ${row.phone ?? ""}\npushname: ${row.pushname ?? ""}\nbusiness: ${row.is_business ? "yes" : "no"}\nabout: ${row.about ?? ""}\n`,
+		);
+	} finally {
+		db.close();
+	}
 }
