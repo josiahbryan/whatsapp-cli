@@ -8,6 +8,7 @@ export interface WatchdogOpts {
 
 export class Watchdog {
 	private timer: ReturnType<typeof setTimeout> | null = null;
+	private inflightTimeout: ReturnType<typeof setTimeout> | null = null;
 	private failures = 0;
 	private stopping = false;
 	private recovering = false;
@@ -24,6 +25,10 @@ export class Watchdog {
 		if (this.timer) {
 			clearTimeout(this.timer);
 			this.timer = null;
+		}
+		if (this.inflightTimeout) {
+			clearTimeout(this.inflightTimeout);
+			this.inflightTimeout = null;
 		}
 	}
 
@@ -55,13 +60,16 @@ export class Watchdog {
 	private withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
 			const t = setTimeout(() => reject(new Error("watchdog timeout")), ms);
+			this.inflightTimeout = t;
 			p.then(
 				(v) => {
 					clearTimeout(t);
+					if (this.inflightTimeout === t) this.inflightTimeout = null;
 					resolve(v);
 				},
 				(err) => {
 					clearTimeout(t);
+					if (this.inflightTimeout === t) this.inflightTimeout = null;
 					reject(err);
 				},
 			);
