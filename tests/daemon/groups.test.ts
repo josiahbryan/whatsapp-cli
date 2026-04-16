@@ -5,10 +5,7 @@ import { join } from "node:path";
 import { upsertChat } from "../../src/storage/chats.js";
 import { upsertContact } from "../../src/storage/contacts.js";
 import { openDatabase } from "../../src/storage/db.js";
-import {
-	getGroupParticipants,
-	syncGroupParticipants,
-} from "../../src/storage/groups.js";
+import { getGroupParticipants, syncGroupParticipants } from "../../src/storage/groups.js";
 
 function tempDb() {
 	const dir = mkdtempSync(join(tmpdir(), "wacli-grp-"));
@@ -69,10 +66,7 @@ describe("group_participants", () => {
 				{ contact_id: "3@c.us", is_admin: 1 },
 			]);
 			const parts = getGroupParticipants(db, "grp@g.us");
-			expect(parts.map((p) => p.contact_id).sort()).toEqual([
-				"1@c.us",
-				"3@c.us",
-			]);
+			expect(parts.map((p) => p.contact_id).sort()).toEqual(["1@c.us", "3@c.us"]);
 			expect(parts.find((p) => p.contact_id === "1@c.us")?.is_admin).toBe(0);
 		} finally {
 			cleanup();

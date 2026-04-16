@@ -34,10 +34,7 @@ export function syncGroupParticipants(
 	tx(participants);
 }
 
-export function getGroupParticipants(
-	db: Database,
-	chat_id: string,
-): GroupParticipantRow[] {
+export function getGroupParticipants(db: Database, chat_id: string): GroupParticipantRow[] {
 	return db
 		.prepare(
 			`SELECT chat_id, contact_id, is_admin FROM group_participants

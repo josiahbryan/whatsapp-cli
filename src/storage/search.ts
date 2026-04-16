@@ -26,11 +26,6 @@ export function searchMessages(db: Database, opts: SearchOpts): SearchHit[] {
 		where.push("m.timestamp >= @since_ts");
 		params["@since_ts"] = opts.since_ts;
 	}
-	const sql =
-		`SELECT m.wa_id, m.chat_id, m.timestamp, m.body, ` +
-		`snippet(messages_fts, 0, '[', ']', '…', 10) AS snippet ` +
-		`FROM messages_fts JOIN messages m ON m.rowid = messages_fts.rowid ` +
-		`WHERE ${where.join(" AND ")} ` +
-		`ORDER BY m.timestamp DESC LIMIT ${Math.max(1, Math.floor(opts.limit))}`;
+	const sql = `SELECT m.wa_id, m.chat_id, m.timestamp, m.body, snippet(messages_fts, 0, '[', ']', '…', 10) AS snippet FROM messages_fts JOIN messages m ON m.rowid = messages_fts.rowid WHERE ${where.join(" AND ")} ORDER BY m.timestamp DESC LIMIT ${Math.max(1, Math.floor(opts.limit))}`;
 	return db.prepare(sql).all(params) as SearchHit[];
 }
