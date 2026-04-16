@@ -40,6 +40,9 @@ export class Daemon {
 
 	constructor(private readonly opts: DaemonOptions) {
 		this.server = new DaemonServer(opts.paths.socket);
+		const logger = new FileLogger({ path: opts.paths.logFile, maxBytes: 10 * 1024 * 1024 });
+		this.sm.onTransition((s) => logger.info("state", { state: s }));
+		this.sm.onTransition((s) => this.onStateTransition(s));
 	}
 
 	async start(): Promise<void> {
@@ -47,10 +50,6 @@ export class Daemon {
 		mkdirSync(this.opts.paths.sessionDir, { recursive: true });
 		mkdirSync(this.opts.paths.filesDir, { recursive: true });
 
-		const logger = new FileLogger({ path: this.opts.paths.logFile, maxBytes: 10 * 1024 * 1024 });
-		this.sm.onTransition((s) => logger.info("state", { state: s }));
-
-		this.sm.onTransition((s) => this.onStateTransition(s));
 		this.sm.transition("starting");
 
 		this.acquirePidLock();
