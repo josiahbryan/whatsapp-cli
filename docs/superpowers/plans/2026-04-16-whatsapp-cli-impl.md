@@ -6,7 +6,7 @@
 
 **Architecture:** Daemon (owns whatsapp-web.js session + SQLite writer) exposes a Unix-socket JSON-RPC surface for writes/streams. Short-lived CLI auto-boots the daemon and reads directly from SQLite (WAL mode) for queries. One daemon per account under `~/.whatsapp-cli/accounts/<account>/`.
 
-**Tech Stack:** Bun (runtime + compiler via `bun build --compile`), pnpm (package manager), TypeScript (strict, ES2022, NodeNext), commander v12, whatsapp-web.js (Puppeteer-driven), better-sqlite3 (WAL + FTS5), qrcode (PNG), Biome (lint/format), GitHub Actions CI.
+**Tech Stack:** Bun (runtime + compiler via `bun build --compile`), pnpm (package manager), TypeScript (strict, ES2022, NodeNext), commander v12, whatsapp-web.js (Puppeteer-driven), `bun:sqlite` (WAL + FTS5), qrcode (PNG), Biome (lint/format), GitHub Actions CI.
 
 **Spec:** [docs/superpowers/specs/2026-04-16-whatsapp-cli-design.md](../specs/2026-04-16-whatsapp-cli-design.md)
 
@@ -180,14 +180,12 @@ Total: 41 tasks.
     "release": "bash scripts/release.sh"
   },
   "dependencies": {
-    "better-sqlite3": "^11.3.0",
     "commander": "^12.1.0",
     "qrcode": "^1.5.4",
     "whatsapp-web.js": "^1.26.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.7.0",
     "@types/qrcode": "^1.5.5",
     "typescript": "^5.6.0"
@@ -1194,7 +1192,7 @@ git-atomic-commit commit -f src/util/paths.ts tests/unit/paths.test.ts \
 
 ```ts
 import { describe, expect, test } from "bun:test";
-import Database from "better-sqlite3";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1217,8 +1215,10 @@ describe("openDatabase", () => {
 			for (const t of ["chats", "messages", "reactions", "contacts", "group_participants"]) {
 				expect(tables).toContain(t);
 			}
-			expect(db.pragma("journal_mode", { simple: true })).toBe("wal");
-			expect(db.pragma("user_version", { simple: true })).toBeGreaterThan(0);
+			const jm = db.prepare("PRAGMA journal_mode").get() as { journal_mode: string };
+			expect(jm.journal_mode).toBe("wal");
+			const uv = db.prepare("PRAGMA user_version").get() as { user_version: number };
+			expect(uv.user_version).toBeGreaterThan(0);
 			db.close();
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
@@ -1229,10 +1229,11 @@ describe("openDatabase", () => {
 		const { dir, path } = tempDbPath();
 		try {
 			const db1 = openDatabase(path);
-			const v1 = db1.pragma("user_version", { simple: true });
+			const v1 = (db1.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
 			db1.close();
 			const db2 = openDatabase(path);
-			expect(db2.pragma("user_version", { simple: true })).toBe(v1);
+			const v2 = (db2.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
+			expect(v2).toBe(v1);
 			db2.close();
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
@@ -1242,7 +1243,7 @@ describe("openDatabase", () => {
 	test("FTS virtual table exists", () => {
 		const { dir, path } = tempDbPath();
 		try {
-			const db: Database.Database = openDatabase(path);
+			const db = openDatabase(path);
 			const row = db
 				.prepare("SELECT name FROM sqlite_master WHERE name = 'messages_fts'")
 				.get() as { name: string } | undefined;
@@ -1264,11 +1265,11 @@ bun test tests/daemon/db-migrations.test.ts
 - [ ] **Step 3: Write `src/storage/migrations.ts`**
 
 ```ts
-import type Database from "better-sqlite3";
+import type { Database } from "bun:sqlite";
 
 export interface Migration {
 	version: number;
-	up: (db: Database.Database) => void;
+	up: (db: Database) => void;
 }
 
 export const MIGRATIONS: Migration[] = [
@@ -1357,13 +1358,14 @@ export function currentVersion(): number {
 	return MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
 }
 
-export function migrate(db: Database.Database): void {
-	const current = db.pragma("user_version", { simple: true }) as number;
+export function migrate(db: Database): void {
+	const row = db.prepare("PRAGMA user_version").get() as { user_version: number };
+	const current = row.user_version;
 	for (const m of MIGRATIONS) {
 		if (m.version > current) {
 			db.transaction(() => {
 				m.up(db);
-				db.pragma(`user_version = ${m.version}`);
+				db.exec(`PRAGMA user_version = ${m.version}`);
 			})();
 		}
 	}
@@ -1373,7 +1375,7 @@ export function migrate(db: Database.Database): void {
 - [ ] **Step 4: Write `src/storage/db.ts`**
 
 ```ts
-import Database from "better-sqlite3";
+import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { migrate } from "./migrations.js";
@@ -1382,12 +1384,12 @@ export interface OpenOptions {
 	readonly?: boolean;
 }
 
-export function openDatabase(path: string, opts: OpenOptions = {}): Database.Database {
+export function openDatabase(path: string, opts: OpenOptions = {}): Database {
 	if (!opts.readonly) mkdirSync(dirname(path), { recursive: true });
-	const db = new Database(path, { readonly: opts.readonly ?? false });
-	db.pragma("journal_mode = WAL");
-	db.pragma("foreign_keys = ON");
-	db.pragma("synchronous = NORMAL");
+	const db = new Database(path, { readonly: opts.readonly ?? false, create: !opts.readonly });
+	db.exec("PRAGMA journal_mode = WAL");
+	db.exec("PRAGMA foreign_keys = ON");
+	db.exec("PRAGMA synchronous = NORMAL");
 	if (!opts.readonly) migrate(db);
 	return db;
 }
@@ -1535,7 +1537,7 @@ describe("chats storage", () => {
 - [ ] **Step 3: Write `src/storage/chats.ts`**
 
 ```ts
-import type Database from "better-sqlite3";
+import type { Database } from "bun:sqlite";
 
 export interface ChatRow {
 	id: string;
@@ -1551,7 +1553,7 @@ export interface ListChatsOpts {
 	limit?: number;
 }
 
-export function upsertChat(db: Database.Database, chat: ChatRow): void {
+export function upsertChat(db: Database, chat: ChatRow): void {
 	db.prepare(
 		`INSERT INTO chats (id, kind, name, phone, updated_at)
 		 VALUES (@id, @kind, @name, @phone, @updated_at)
@@ -1564,7 +1566,7 @@ export function upsertChat(db: Database.Database, chat: ChatRow): void {
 	).run(chat);
 }
 
-export function listChats(db: Database.Database, opts: ListChatsOpts): ChatRow[] {
+export function listChats(db: Database, opts: ListChatsOpts): ChatRow[] {
 	const where: string[] = [];
 	const params: Record<string, unknown> = {};
 	if (opts.kind) {
@@ -1584,7 +1586,7 @@ export function listChats(db: Database.Database, opts: ListChatsOpts): ChatRow[]
 }
 
 export function bumpChatUpdatedAt(
-	db: Database.Database,
+	db: Database,
 	chatId: string,
 	timestamp: number,
 ): void {
@@ -1736,7 +1738,7 @@ describe("messages storage", () => {
 - [ ] **Step 3: Write `src/storage/messages.ts`**
 
 ```ts
-import type Database from "better-sqlite3";
+import type { Database } from "bun:sqlite";
 
 export interface MessageRow {
 	rowid: number;
@@ -1756,7 +1758,7 @@ export interface MessageRow {
 
 export type NewMessage = Omit<MessageRow, "rowid">;
 
-export function insertMessage(db: Database.Database, m: NewMessage): number | null {
+export function insertMessage(db: Database, m: NewMessage): number | null {
 	const info = db
 		.prepare(
 			`INSERT OR IGNORE INTO messages
@@ -1770,12 +1772,12 @@ export function insertMessage(db: Database.Database, m: NewMessage): number | nu
 	return info.changes === 1 ? Number(info.lastInsertRowid) : null;
 }
 
-export function getMaxRowid(db: Database.Database): number {
+export function getMaxRowid(db: Database): number {
 	const row = db.prepare(`SELECT COALESCE(MAX(rowid), 0) AS m FROM messages`).get() as { m: number };
 	return row.m;
 }
 
-export function getMessageByWaId(db: Database.Database, wa_id: string): MessageRow | null {
+export function getMessageByWaId(db: Database, wa_id: string): MessageRow | null {
 	const row = db
 		.prepare(`SELECT rowid, * FROM messages WHERE wa_id = ?`)
 		.get(wa_id) as MessageRow | undefined;
@@ -1791,7 +1793,7 @@ export interface ListByChatOpts {
 	to_ts?: number;
 }
 
-export function listMessagesByChat(db: Database.Database, opts: ListByChatOpts): MessageRow[] {
+export function listMessagesByChat(db: Database, opts: ListByChatOpts): MessageRow[] {
 	const where: string[] = ["chat_id = @chat_id"];
 	const params: Record<string, unknown> = { chat_id: opts.chat_id };
 	if (opts.before_rowid !== undefined) {
@@ -1822,7 +1824,7 @@ export interface ListSinceOpts {
 	chat_id?: string;
 }
 
-export function listMessagesSinceRowid(db: Database.Database, opts: ListSinceOpts): MessageRow[] {
+export function listMessagesSinceRowid(db: Database, opts: ListSinceOpts): MessageRow[] {
 	const where: string[] = ["rowid > @since_rowid"];
 	const params: Record<string, unknown> = { since_rowid: opts.since_rowid };
 	if (opts.chat_id) {
@@ -1970,7 +1972,7 @@ describe("reactions storage", () => {
 - [ ] **Step 3: Write `src/storage/reactions.ts`**
 
 ```ts
-import type Database from "better-sqlite3";
+import type { Database } from "bun:sqlite";
 
 export interface ReactionRow {
 	message_wa_id: string;
@@ -1979,7 +1981,7 @@ export interface ReactionRow {
 	timestamp: number;
 }
 
-export function applyReaction(db: Database.Database, r: ReactionRow): void {
+export function applyReaction(db: Database, r: ReactionRow): void {
 	if (r.emoji === "") {
 		db.prepare(
 			`DELETE FROM reactions WHERE message_wa_id = @message_wa_id AND reactor_id = @reactor_id`,
@@ -1996,7 +1998,7 @@ export function applyReaction(db: Database.Database, r: ReactionRow): void {
 }
 
 export function listReactionsForMessage(
-	db: Database.Database,
+	db: Database,
 	message_wa_id: string,
 ): ReactionRow[] {
 	return db
@@ -2142,7 +2144,7 @@ describe("contacts storage", () => {
 - [ ] **Step 3: Write `src/storage/contacts.ts`**
 
 ```ts
-import type Database from "better-sqlite3";
+import type { Database } from "bun:sqlite";
 
 export interface ContactRow {
 	id: string;
@@ -2155,7 +2157,7 @@ export interface ContactRow {
 	updated_at: number;
 }
 
-export function upsertContact(db: Database.Database, c: ContactRow): void {
+export function upsertContact(db: Database, c: ContactRow): void {
 	db.prepare(
 		`INSERT INTO contacts (id, phone, pushname, verified_name, is_business, is_my_contact, about, updated_at)
 		 VALUES (@id, @phone, @pushname, @verified_name, @is_business, @is_my_contact, @about, @updated_at)
@@ -2171,7 +2173,7 @@ export function upsertContact(db: Database.Database, c: ContactRow): void {
 	).run(c);
 }
 
-export function getContact(db: Database.Database, id: string): ContactRow | null {
+export function getContact(db: Database, id: string): ContactRow | null {
 	return (
 		(db.prepare(`SELECT * FROM contacts WHERE id = ?`).get(id) as ContactRow | undefined) ?? null
 	);
@@ -2184,7 +2186,7 @@ export interface ListContactsOpts {
 	limit?: number;
 }
 
-export function listContacts(db: Database.Database, opts: ListContactsOpts): ContactRow[] {
+export function listContacts(db: Database, opts: ListContactsOpts): ContactRow[] {
 	const where: string[] = [];
 	const params: Record<string, unknown> = {};
 	if (opts.business) where.push("is_business = 1");
@@ -2201,7 +2203,7 @@ export function listContacts(db: Database.Database, opts: ListContactsOpts): Con
 	return db.prepare(sql).all(params) as ContactRow[];
 }
 
-export function getContactByPhone(db: Database.Database, phone: string): ContactRow | null {
+export function getContactByPhone(db: Database, phone: string): ContactRow | null {
 	return (
 		(db.prepare(`SELECT * FROM contacts WHERE phone = ?`).get(phone) as ContactRow | undefined) ??
 		null
@@ -2316,7 +2318,7 @@ describe("group_participants", () => {
 - [ ] **Step 3: Write `src/storage/groups.ts`**
 
 ```ts
-import type Database from "better-sqlite3";
+import type { Database } from "bun:sqlite";
 
 export interface GroupParticipantRow {
 	chat_id: string;
@@ -2330,7 +2332,7 @@ export interface ParticipantInput {
 }
 
 export function syncGroupParticipants(
-	db: Database.Database,
+	db: Database,
 	chat_id: string,
 	participants: ParticipantInput[],
 ): void {
@@ -2347,7 +2349,7 @@ export function syncGroupParticipants(
 }
 
 export function getGroupParticipants(
-	db: Database.Database,
+	db: Database,
 	chat_id: string,
 ): GroupParticipantRow[] {
 	return db
@@ -2478,7 +2480,7 @@ describe("searchMessages", () => {
 - [ ] **Step 3: Write `src/storage/search.ts`**
 
 ```ts
-import type Database from "better-sqlite3";
+import type { Database } from "bun:sqlite";
 
 export interface SearchHit {
 	wa_id: string;
@@ -2495,7 +2497,7 @@ export interface SearchOpts {
 	limit: number;
 }
 
-export function searchMessages(db: Database.Database, opts: SearchOpts): SearchHit[] {
+export function searchMessages(db: Database, opts: SearchOpts): SearchHit[] {
 	const where: string[] = ["messages_fts MATCH @query"];
 	const params: Record<string, unknown> = { query: opts.query };
 	if (opts.chat_id) {
@@ -3625,7 +3627,7 @@ describe("backfillChats", () => {
 - [ ] **Step 3: Write `src/daemon/backfill.ts`**
 
 ```ts
-import type Database from "better-sqlite3";
+import type { Database } from "bun:sqlite";
 import { bumpChatUpdatedAt } from "../storage/chats.js";
 import { insertMessage } from "../storage/messages.js";
 import type { WhatsAppClient } from "../wa/client.js";
@@ -3642,7 +3644,7 @@ export interface BackfillReport {
 }
 
 export async function backfillChats(
-	db: Database.Database,
+	db: Database,
 	client: WhatsAppClient,
 	opts: BackfillOpts,
 ): Promise<BackfillReport> {
@@ -4002,7 +4004,7 @@ describe("Daemon", () => {
 - [ ] **Step 3: Write `src/daemon/index.ts`**
 
 ```ts
-import type Database from "better-sqlite3";
+import type { Database } from "bun:sqlite";
 import { mkdirSync, writeFileSync, unlinkSync, existsSync, openSync, closeSync, writeSync } from "node:fs";
 import { backfillChats } from "./backfill.js";
 import { DaemonServer } from "./server.js";
@@ -4026,7 +4028,7 @@ export interface DaemonOptions {
 export class Daemon {
 	private readonly sm = new StateMachine();
 	private readonly server: DaemonServer;
-	private db: Database.Database | null = null;
+	private db: Database | null = null;
 	private pidFd: number | null = null;
 
 	constructor(private readonly opts: DaemonOptions) {
@@ -4066,7 +4068,7 @@ export class Daemon {
 		}
 		await this.server.stop();
 		if (this.db) {
-			this.db.pragma("wal_checkpoint(TRUNCATE)");
+			this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 			this.db.close();
 			this.db = null;
 		}
@@ -4148,14 +4150,14 @@ export class Daemon {
 		client.on("message", (m) => {
 			if (!this.db) return;
 			this.db.transaction(() => {
-				upsertChat(this.db as Database.Database, {
+				upsertChat(this.db as Database, {
 					id: m.chat_id,
 					kind: m.chat_id.endsWith("@g.us") ? "group" : "dm",
 					name: null,
 					phone: m.chat_id.endsWith("@c.us") ? (m.chat_id.split("@")[0] ?? null) : null,
 					updated_at: m.timestamp,
 				});
-				const rowid = insertMessage(this.db as Database.Database, {
+				const rowid = insertMessage(this.db as Database, {
 					wa_id: m.wa_id,
 					chat_id: m.chat_id,
 					from_id: m.from_id,
@@ -4169,7 +4171,7 @@ export class Daemon {
 					attachment_mime: m.attachment?.mimetype ?? null,
 					attachment_filename: m.attachment?.filename ?? null,
 				});
-				bumpChatUpdatedAt(this.db as Database.Database, m.chat_id, m.timestamp);
+				bumpChatUpdatedAt(this.db as Database, m.chat_id, m.timestamp);
 				if (rowid !== null) {
 					this.server.broadcast({ event: "message", data: { ...m, rowid } });
 				}
