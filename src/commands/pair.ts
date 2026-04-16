@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, rmSync, unlinkSync } from "node:fs";
 import { ensureDaemon } from "../ipc/auto-boot.js";
+import { CliError } from "../util/errors.js";
 import { envelopeError, envelopeOk, formatEnvelope } from "../util/json.js";
 import { type AccountPaths, accountPaths } from "../util/paths.js";
 import type { GlobalFlags } from "./types.js";
@@ -52,7 +53,7 @@ export async function run(_args: Record<string, unknown>, flags: GlobalFlags): P
 							}),
 						),
 					);
-					process.exit(2);
+					throw new CliError("qr_required", 2, "scan the QR to complete pairing");
 				}
 				process.stderr.write(
 					`Scan the QR at ${paths.qrPng} via WhatsApp → Settings → Linked Devices. Waiting...\n`,
@@ -65,11 +66,12 @@ export async function run(_args: Record<string, unknown>, flags: GlobalFlags): P
 			await client.close();
 		}
 	} catch (err) {
+		if (err instanceof CliError) throw err;
 		const e = err as { code?: string; message?: string };
-		process.stdout.write(
-			formatEnvelope(envelopeError(e.code ?? "error", e.message ?? String(err))),
-		);
-		process.exit(1);
+		const code = e.code ?? "error";
+		const message = e.message ?? String(err);
+		process.stdout.write(formatEnvelope(envelopeError(code, message)));
+		throw new CliError(code, 1, message);
 	}
 }
 
@@ -100,11 +102,18 @@ async function waitForState(
 	timeoutMs: number,
 ): Promise<string> {
 	return new Promise<string>((resolve, reject) => {
-		const timer = setTimeout(() => reject(new Error("state timeout")), timeoutMs);
+		let settled = false;
+		const timer = setTimeout(() => {
+			if (settled) return;
+			settled = true;
+			reject(new Error("state timeout"));
+		}, timeoutMs);
 		client.onEvent((e) => {
+			if (settled) return;
 			if (e.event !== "state") return;
 			const s = (e.data as { state: string }).state;
 			if (targets.includes(s)) {
+				settled = true;
 				clearTimeout(timer);
 				resolve(s);
 			}

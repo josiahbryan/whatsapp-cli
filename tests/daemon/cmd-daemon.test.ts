@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { runStatus, runStop } from "../../src/commands/daemon.js";
+import { dirname, join } from "node:path";
+import { runLogs, runStatus, runStop } from "../../src/commands/daemon.js";
 import { Daemon } from "../../src/daemon/index.js";
 import { accountPaths } from "../../src/util/paths.js";
 import { FakeWhatsAppClient } from "../../src/wa/fake-client.js";
@@ -58,6 +58,60 @@ describe("daemon lifecycle commands", () => {
 			const out = await captureStdout(() => runStatus({}, { json: true, account: "default" }));
 			const env = JSON.parse(out);
 			expect(env.data.state).toBe("stopped");
+		} finally {
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("logs preserves last line when file lacks trailing newline", async () => {
+		const root = mkdtempSync(join(tmpdir(), "wacli-cmd-daemon-"));
+		process.env.WA_CLI_HOME = root;
+		const paths = accountPaths("default", root);
+		try {
+			mkdirSync(dirname(paths.logFile), { recursive: true });
+			writeFileSync(paths.logFile, "a\nb\nc");
+			const out = await captureStdout(() =>
+				runLogs({ n: "10" }, { json: true, account: "default" }),
+			);
+			const env = JSON.parse(out);
+			expect(env.data.lines).toEqual(["a", "b", "c"]);
+		} finally {
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("logs drops trailing empty when file ends with newline", async () => {
+		const root = mkdtempSync(join(tmpdir(), "wacli-cmd-daemon-"));
+		process.env.WA_CLI_HOME = root;
+		const paths = accountPaths("default", root);
+		try {
+			mkdirSync(dirname(paths.logFile), { recursive: true });
+			writeFileSync(paths.logFile, "a\nb\nc\n");
+			const out = await captureStdout(() =>
+				runLogs({ n: "10" }, { json: true, account: "default" }),
+			);
+			const env = JSON.parse(out);
+			expect(env.data.lines).toEqual(["a", "b", "c"]);
+		} finally {
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("logs returns empty array when file missing", async () => {
+		const root = mkdtempSync(join(tmpdir(), "wacli-cmd-daemon-"));
+		process.env.WA_CLI_HOME = root;
+		try {
+			const out = await captureStdout(() =>
+				runLogs({ n: "10" }, { json: true, account: "default" }),
+			);
+			const env = JSON.parse(out);
+			expect(env.data.lines).toEqual([]);
 		} finally {
 			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
 			delete process.env.WA_CLI_HOME;

@@ -14,6 +14,7 @@ async function tryIpc(socketPath: string): Promise<IpcClient | null> {
 		await c.connect();
 		return c;
 	} catch {
+		await c.close().catch(() => {});
 		return null;
 	}
 }
@@ -93,8 +94,9 @@ export async function runLogs(args: Record<string, unknown>, flags: GlobalFlags)
 		return;
 	}
 	const content = readFileSync(paths.logFile, "utf8");
-	const lines = content.split("\n");
-	const tail = lines.slice(-n - 1, -1);
+	const split = content.split("\n");
+	const parts = content.endsWith("\n") ? split.slice(0, -1) : split;
+	const tail = parts.slice(-n);
 	process.stdout.write(formatEnvelope(envelopeOk({ lines: tail })));
 	if (args.follow) {
 		process.stderr.write("--follow not supported in v1\n");
