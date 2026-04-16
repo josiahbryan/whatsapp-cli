@@ -93,10 +93,10 @@ describe("tail command", () => {
 				return true;
 			}) as typeof process.stdout.write;
 			const ac = new AbortController();
-			const runPromise = run({ follow: true, abortSignal: ac.signal } as never, {
-				json: true,
-				account: "default",
-			});
+			const runPromise = run(
+				{ follow: true, abortSignal: ac.signal },
+				{ json: true, account: "default" },
+			);
 			await new Promise((r) => setTimeout(r, 50));
 			fake.emitMessage({
 				wa_id: "live1",

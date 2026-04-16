@@ -15,6 +15,11 @@ interface Args {
 	abortSignal?: AbortSignal;
 }
 
+interface EventData {
+	chat_id: string;
+	wa_id: string;
+}
+
 export async function run(args: Args, flags: GlobalFlags): Promise<void> {
 	const paths = accountPaths(flags.account);
 	const chatFilter = args.chat ? normalizeChatId(args.chat) : undefined;
@@ -50,6 +55,28 @@ export async function run(args: Args, flags: GlobalFlags): Promise<void> {
 		pollMs: 250,
 	});
 	try {
+		const seen = new Set<string>();
+		const buffered: EventData[] = [];
+		let draining = true;
+
+		const emitLive = (data: EventData): void => {
+			if (chatFilter && data.chat_id !== chatFilter) return;
+			if (seen.has(data.wa_id)) return;
+			seen.add(data.wa_id);
+			process.stdout.write(`${JSON.stringify(data)}\n`);
+		};
+
+		client.onEvent((e) => {
+			if (e.event !== "message") return;
+			const data = e.data as EventData;
+			if (draining) {
+				buffered.push(data);
+				return;
+			}
+			emitLive(data);
+		});
+		await client.call("subscribe", {});
+
 		const db = openDatabase(paths.db, { readonly: true });
 		try {
 			const catchup = listMessagesSinceRowid(db, {
@@ -57,19 +84,25 @@ export async function run(args: Args, flags: GlobalFlags): Promise<void> {
 				limit: 10_000,
 				chat_id: chatFilter,
 			});
-			for (const r of catchup) process.stdout.write(`${JSON.stringify(r)}\n`);
+			for (const r of catchup) {
+				seen.add(r.wa_id);
+				process.stdout.write(`${JSON.stringify(r)}\n`);
+			}
+			process.stderr.write(`${getMaxRowid(db)}\n`);
 		} finally {
 			db.close();
 		}
-		client.onEvent((e) => {
-			if (e.event !== "message") return;
-			const data = e.data as { chat_id: string };
-			if (chatFilter && data.chat_id !== chatFilter) return;
-			process.stdout.write(`${JSON.stringify(e.data)}\n`);
-		});
-		await client.call("subscribe", {});
+
+		draining = false;
+		for (const data of buffered) emitLive(data);
+
 		await new Promise<void>((resolve) => {
-			const stop = () => resolve();
+			const stop = (): void => {
+				args.abortSignal?.removeEventListener("abort", stop);
+				process.removeListener("SIGINT", stop);
+				process.removeListener("SIGTERM", stop);
+				resolve();
+			};
 			args.abortSignal?.addEventListener("abort", stop);
 			process.once("SIGINT", stop);
 			process.once("SIGTERM", stop);
