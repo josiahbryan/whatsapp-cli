@@ -48,8 +48,9 @@ export class FrameDecoder {
 	push(chunk: Buffer): Frame[] {
 		this.buffer += chunk.toString("utf8");
 		const frames: Frame[] = [];
-		let nl: number;
-		while ((nl = this.buffer.indexOf("\n")) >= 0) {
+		for (;;) {
+			const nl = this.buffer.indexOf("\n");
+			if (nl < 0) break;
 			const line = this.buffer.slice(0, nl);
 			this.buffer = this.buffer.slice(nl + 1);
 			if (line.trim() === "") continue;

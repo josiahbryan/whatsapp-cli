@@ -27,8 +27,12 @@ describe("accountPaths", () => {
 		try {
 			expect(rootDir()).toBe("/tmp/wacli-env-override");
 		} finally {
-			if (original === undefined) delete process.env.WA_CLI_HOME;
-			else process.env.WA_CLI_HOME = original;
+			if (original === undefined) {
+				// biome-ignore lint/performance/noDelete: env vars coerce to string on assignment; delete is the correct restore
+				delete process.env.WA_CLI_HOME;
+			} else {
+				process.env.WA_CLI_HOME = original;
+			}
 		}
 	});
 });

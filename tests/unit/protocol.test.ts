@@ -12,15 +12,19 @@ describe("FrameDecoder", () => {
 		const d = new FrameDecoder();
 		const frames = d.push(Buffer.from('{"id":"a","method":"status","params":{}}\n'));
 		expect(frames).toHaveLength(1);
-		expect(isRequestFrame(frames[0]!)).toBe(true);
+		const f = frames[0];
+		if (!f) throw new Error("no frame");
+		expect(isRequestFrame(f)).toBe(true);
 	});
 
 	test("splits multiple lines in one chunk", () => {
 		const d = new FrameDecoder();
 		const frames = d.push(Buffer.from('{"id":"a","result":1}\n{"event":"state","data":{}}\n'));
 		expect(frames).toHaveLength(2);
-		expect(isResponseFrame(frames[0]!)).toBe(true);
-		expect(isEventFrame(frames[1]!)).toBe(true);
+		const [f0, f1] = frames;
+		if (!f0 || !f1) throw new Error("missing frame");
+		expect(isResponseFrame(f0)).toBe(true);
+		expect(isEventFrame(f1)).toBe(true);
 	});
 
 	test("buffers incomplete line across chunks", () => {
@@ -28,8 +32,10 @@ describe("FrameDecoder", () => {
 		expect(d.push(Buffer.from('{"id":"a",'))).toHaveLength(0);
 		const frames = d.push(Buffer.from('"result":42}\n'));
 		expect(frames).toHaveLength(1);
-		const f = frames[0]!;
-		if (!isResponseFrame(f)) throw new Error("not a response frame");
+		const f = frames[0];
+		if (!f || !isResponseFrame(f) || !("result" in f)) {
+			throw new Error("not an ok response frame");
+		}
 		expect(f.result).toBe(42);
 	});
 
