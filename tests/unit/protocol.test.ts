@@ -48,6 +48,13 @@ describe("FrameDecoder", () => {
 		const d = new FrameDecoder();
 		expect(() => d.push(Buffer.from("not json\n"))).toThrow(/malformed/i);
 	});
+
+	test("valid JSON that matches no frame shape throws", () => {
+		const d = new FrameDecoder();
+		expect(() => d.push(Buffer.from("null\n"))).toThrow(/malformed/i);
+		expect(() => d.push(Buffer.from("42\n"))).toThrow(/malformed/i);
+		expect(() => d.push(Buffer.from('{"foo":"bar"}\n'))).toThrow(/malformed/i);
+	});
 });
 
 describe("encodeFrame", () => {

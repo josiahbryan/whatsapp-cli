@@ -23,19 +23,20 @@ export interface EventFrame {
 
 export type Frame = RequestFrame | ResponseFrame | EventFrame;
 
-export function isRequestFrame(f: Frame): f is RequestFrame {
-	return typeof (f as RequestFrame).method === "string";
+function isObject(x: unknown): x is Record<string, unknown> {
+	return typeof x === "object" && x !== null;
 }
 
-export function isResponseFrame(f: Frame): f is ResponseFrame {
-	return (
-		typeof (f as ResponseFrame).id === "string" &&
-		("result" in (f as ResponseOkFrame) || "error" in (f as ResponseErrFrame))
-	);
+export function isRequestFrame(f: unknown): f is RequestFrame {
+	return isObject(f) && typeof f.method === "string" && typeof f.id === "string";
 }
 
-export function isEventFrame(f: Frame): f is EventFrame {
-	return typeof (f as EventFrame).event === "string";
+export function isResponseFrame(f: unknown): f is ResponseFrame {
+	return isObject(f) && typeof f.id === "string" && ("result" in f || "error" in f);
+}
+
+export function isEventFrame(f: unknown): f is EventFrame {
+	return isObject(f) && typeof f.event === "string";
 }
 
 export function encodeFrame(frame: Frame): Buffer {
@@ -54,11 +55,16 @@ export class FrameDecoder {
 			const line = this.buffer.slice(0, nl);
 			this.buffer = this.buffer.slice(nl + 1);
 			if (line.trim() === "") continue;
+			let parsed: unknown;
 			try {
-				frames.push(JSON.parse(line) as Frame);
+				parsed = JSON.parse(line);
 			} catch (_err) {
 				throw new Error(`malformed frame: ${line.slice(0, 80)}`);
 			}
+			if (!isRequestFrame(parsed) && !isResponseFrame(parsed) && !isEventFrame(parsed)) {
+				throw new Error(`malformed frame: ${line.slice(0, 80)}`);
+			}
+			frames.push(parsed);
 		}
 		return frames;
 	}
