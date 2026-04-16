@@ -2,11 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-	getContact,
-	listContacts,
-	upsertContact,
-} from "../../src/storage/contacts.js";
+import { getContact, listContacts, upsertContact } from "../../src/storage/contacts.js";
 import { openDatabase } from "../../src/storage/db.js";
 
 function tempDb() {

@@ -38,7 +38,7 @@ export function upsertContact(db: Database, c: ContactRow): void {
 
 export function getContact(db: Database, id: string): ContactRow | null {
 	return (
-		(db.prepare(`SELECT * FROM contacts WHERE id = ?`).get(id) as ContactRow | undefined) ?? null
+		(db.prepare("SELECT * FROM contacts WHERE id = ?").get(id) as ContactRow | undefined) ?? null
 	);
 }
 
@@ -51,24 +51,20 @@ export interface ListContactsOpts {
 
 export function listContacts(db: Database, opts: ListContactsOpts): ContactRow[] {
 	const where: string[] = [];
-	const params: Record<string, unknown> = {};
+	const params: Record<string, string | number | null> = {};
 	if (opts.business) where.push("is_business = 1");
 	if (opts.my_contacts) where.push("is_my_contact = 1");
 	if (opts.group_id) {
 		where.push("id IN (SELECT contact_id FROM group_participants WHERE chat_id = @group_id)");
 		params["@group_id"] = opts.group_id;
 	}
-	const sql =
-		`SELECT * FROM contacts` +
-		(where.length > 0 ? ` WHERE ${where.join(" AND ")}` : "") +
-		` ORDER BY pushname COLLATE NOCASE` +
-		(opts.limit ? ` LIMIT ${Math.max(1, Math.floor(opts.limit))}` : "");
+	const sql = `SELECT * FROM contacts${where.length > 0 ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY pushname COLLATE NOCASE${opts.limit ? ` LIMIT ${Math.max(1, Math.floor(opts.limit))}` : ""}`;
 	return db.prepare(sql).all(params) as ContactRow[];
 }
 
 export function getContactByPhone(db: Database, phone: string): ContactRow | null {
 	return (
-		(db.prepare(`SELECT * FROM contacts WHERE phone = ?`).get(phone) as ContactRow | undefined) ??
+		(db.prepare("SELECT * FROM contacts WHERE phone = ?").get(phone) as ContactRow | undefined) ??
 		null
 	);
 }

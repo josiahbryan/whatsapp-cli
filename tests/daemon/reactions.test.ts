@@ -3,10 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase } from "../../src/storage/db.js";
-import {
-	applyReaction,
-	listReactionsForMessage,
-} from "../../src/storage/reactions.js";
+import { applyReaction, listReactionsForMessage } from "../../src/storage/reactions.js";
 
 function tempDb() {
 	const dir = mkdtempSync(join(tmpdir(), "wacli-react-"));

@@ -35,7 +35,7 @@ export function upsertChat(db: Database, chat: ChatRow): void {
 
 export function listChats(db: Database, opts: ListChatsOpts): ChatRow[] {
 	const where: string[] = [];
-	const params: Record<string, unknown> = {};
+	const params: Record<string, string | number | null> = {};
 	if (opts.kind) {
 		where.push("kind = @kind");
 		params["@kind"] = opts.kind;
@@ -44,16 +44,13 @@ export function listChats(db: Database, opts: ListChatsOpts): ChatRow[] {
 		where.push("LOWER(name) LIKE @grep");
 		params["@grep"] = `%${opts.grep.toLowerCase()}%`;
 	}
-	const sql =
-		`SELECT id, kind, name, phone, updated_at FROM chats` +
-		(where.length > 0 ? ` WHERE ${where.join(" AND ")}` : "") +
-		` ORDER BY updated_at DESC` +
-		(opts.limit ? ` LIMIT ${Math.max(1, Math.floor(opts.limit))}` : "");
+	const sql = `SELECT id, kind, name, phone, updated_at FROM chats${where.length > 0 ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY updated_at DESC${opts.limit ? ` LIMIT ${Math.max(1, Math.floor(opts.limit))}` : ""}`;
 	return db.prepare(sql).all(params) as ChatRow[];
 }
 
 export function bumpChatUpdatedAt(db: Database, chatId: string, timestamp: number): void {
-	db.prepare(
-		`UPDATE chats SET updated_at = @ts WHERE id = @id AND @ts > updated_at`,
-	).run({ "@id": chatId, "@ts": timestamp });
+	db.prepare("UPDATE chats SET updated_at = @ts WHERE id = @id AND @ts > updated_at").run({
+		"@id": chatId,
+		"@ts": timestamp,
+	});
 }

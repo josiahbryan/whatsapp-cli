@@ -66,8 +66,8 @@ describe("messages storage", () => {
 		try {
 			const first = insertMessage(db, msg(1));
 			const second = insertMessage(db, msg(1));
-			expect(first).not.toBeNull();
 			expect(second).toBeNull();
+			if (first === null) throw new Error("first insert should have returned a rowid");
 			expect(getMaxRowid(db)).toBe(first);
 		} finally {
 			cleanup();

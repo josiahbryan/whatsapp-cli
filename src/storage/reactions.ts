@@ -10,7 +10,7 @@ export interface ReactionRow {
 export function applyReaction(db: Database, r: ReactionRow): void {
 	if (r.emoji === "") {
 		db.prepare(
-			`DELETE FROM reactions WHERE message_wa_id = @message_wa_id AND reactor_id = @reactor_id`,
+			"DELETE FROM reactions WHERE message_wa_id = @message_wa_id AND reactor_id = @reactor_id",
 		).run({
 			"@message_wa_id": r.message_wa_id,
 			"@reactor_id": r.reactor_id,
@@ -31,10 +31,7 @@ export function applyReaction(db: Database, r: ReactionRow): void {
 	});
 }
 
-export function listReactionsForMessage(
-	db: Database,
-	message_wa_id: string,
-): ReactionRow[] {
+export function listReactionsForMessage(db: Database, message_wa_id: string): ReactionRow[] {
 	return db
 		.prepare(
 			`SELECT message_wa_id, reactor_id, emoji, timestamp

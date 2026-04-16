@@ -46,14 +46,16 @@ export function insertMessage(db: Database, m: NewMessage): number | null {
 }
 
 export function getMaxRowid(db: Database): number {
-	const row = db.prepare(`SELECT COALESCE(MAX(rowid), 0) AS m FROM messages`).get() as { m: number };
+	const row = db.prepare("SELECT COALESCE(MAX(rowid), 0) AS m FROM messages").get() as {
+		m: number;
+	};
 	return row.m;
 }
 
 export function getMessageByWaId(db: Database, wa_id: string): MessageRow | null {
-	const row = db
-		.prepare(`SELECT rowid, * FROM messages WHERE wa_id = ?`)
-		.get(wa_id) as MessageRow | undefined;
+	const row = db.prepare("SELECT rowid, * FROM messages WHERE wa_id = ?").get(wa_id) as
+		| MessageRow
+		| undefined;
 	return row ?? null;
 }
 
@@ -68,7 +70,7 @@ export interface ListByChatOpts {
 
 export function listMessagesByChat(db: Database, opts: ListByChatOpts): MessageRow[] {
 	const where: string[] = ["chat_id = @chat_id"];
-	const params: Record<string, unknown> = { "@chat_id": opts.chat_id };
+	const params: Record<string, string | number | null> = { "@chat_id": opts.chat_id };
 	if (opts.before_rowid !== undefined) {
 		where.push("rowid < @before_rowid");
 		params["@before_rowid"] = opts.before_rowid;
@@ -99,7 +101,7 @@ export interface ListSinceOpts {
 
 export function listMessagesSinceRowid(db: Database, opts: ListSinceOpts): MessageRow[] {
 	const where: string[] = ["rowid > @since_rowid"];
-	const params: Record<string, unknown> = { "@since_rowid": opts.since_rowid };
+	const params: Record<string, string | number | null> = { "@since_rowid": opts.since_rowid };
 	if (opts.chat_id) {
 		where.push("chat_id = @chat_id");
 		params["@chat_id"] = opts.chat_id;
