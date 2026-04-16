@@ -71,6 +71,12 @@ describe("searchMessages", () => {
 			insertMessage(db, { ...mk(2, "needle in d"), chat_id: "d@c.us" });
 			const cOnly = searchMessages(db, { query: "needle", chat_id: "c@c.us", limit: 10 });
 			expect(cOnly.map((h) => h.wa_id)).toEqual(["w1"]);
+			const recent = searchMessages(db, {
+				query: "needle",
+				since_ts: 1_700_000_000_000 + 1500,
+				limit: 10,
+			});
+			expect(recent.map((h) => h.wa_id)).toEqual(["w2"]);
 		} finally {
 			cleanup();
 		}
