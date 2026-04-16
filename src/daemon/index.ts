@@ -15,6 +15,7 @@ import { openDatabase } from "../storage/db.js";
 import { syncGroupParticipants } from "../storage/groups.js";
 import { getMessageByWaId, insertMessage } from "../storage/messages.js";
 import { applyReaction } from "../storage/reactions.js";
+import { FileLogger } from "../util/log.js";
 import type { AccountPaths } from "../util/paths.js";
 import type { WhatsAppClient } from "../wa/client.js";
 import { backfillChats } from "./backfill.js";
@@ -45,6 +46,9 @@ export class Daemon {
 		mkdirSync(this.opts.paths.accountDir, { recursive: true });
 		mkdirSync(this.opts.paths.sessionDir, { recursive: true });
 		mkdirSync(this.opts.paths.filesDir, { recursive: true });
+
+		const logger = new FileLogger({ path: this.opts.paths.logFile, maxBytes: 10 * 1024 * 1024 });
+		this.sm.onTransition((s) => logger.info("state", { state: s }));
 
 		this.sm.onTransition((s) => this.onStateTransition(s));
 		this.sm.transition("starting");

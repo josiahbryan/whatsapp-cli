@@ -47,3 +47,32 @@ export class Logger {
 		this.log("error", message, fields);
 	}
 }
+
+import { appendFileSync, existsSync, renameSync, statSync, unlinkSync } from "node:fs";
+
+export interface FileLoggerOpts {
+	path: string;
+	maxBytes: number;
+}
+
+export class FileLogger extends Logger {
+	constructor(private readonly opts: FileLoggerOpts) {
+		super((line: string) => {
+			this.maybeRotate();
+			appendFileSync(opts.path, `${line}\n`);
+		});
+	}
+
+	private maybeRotate(): void {
+		try {
+			if (!existsSync(this.opts.path)) return;
+			const size = statSync(this.opts.path).size;
+			if (size < this.opts.maxBytes) return;
+			const backup = `${this.opts.path}.1`;
+			if (existsSync(backup)) unlinkSync(backup);
+			renameSync(this.opts.path, backup);
+		} catch {
+			// best-effort rotation; writes continue on the primary path
+		}
+	}
+}
