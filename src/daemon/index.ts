@@ -4,6 +4,7 @@ import {
 	existsSync,
 	mkdirSync,
 	openSync,
+	readFileSync,
 	unlinkSync,
 	writeFileSync,
 	writeSync,
@@ -34,6 +35,7 @@ export class Daemon {
 	private readonly server: DaemonServer;
 	private db: Database | null = null;
 	private pidFd: number | null = null;
+	private ownsPidFile = false;
 
 	constructor(private readonly opts: DaemonOptions) {
 		this.server = new DaemonServer(opts.paths.socket);
@@ -100,17 +102,67 @@ export class Daemon {
 		this.server.broadcast({ event: "state", data: { state: s } });
 	}
 
-	private acquirePidLock(): void {
+	private isProcessAlive(pid: number): boolean {
 		try {
-			this.pidFd = openSync(this.opts.paths.pidFile, "wx");
-			writeSync(this.pidFd, Buffer.from(`${process.pid}\n`));
+			process.kill(pid, 0);
+			// signal 0 succeeded — process exists
+			return true;
 		} catch (err) {
 			const e = err as NodeJS.ErrnoException;
-			if (e.code === "EEXIST") {
+			// ESRCH: no such process — dead
+			// EPERM: process exists but we lack permission — treat as alive
+			return e.code !== "ESRCH";
+		}
+	}
+
+	private acquirePidLock(): void {
+		const tryOpen = (): void => {
+			try {
+				this.pidFd = openSync(this.opts.paths.pidFile, "wx");
+				writeSync(this.pidFd, Buffer.from(`${process.pid}\n`));
+				this.ownsPidFile = true;
+			} catch (err) {
+				const e = err as NodeJS.ErrnoException;
+				if (e.code !== "EEXIST") throw err;
+
+				// Pidfile exists — check if the recorded pid is still alive
+				let stalePid: number | null = null;
+				try {
+					const contents = readFileSync(this.opts.paths.pidFile, "utf8").trim();
+					const parsed = Number.parseInt(contents, 10);
+					if (Number.isFinite(parsed) && parsed > 0) stalePid = parsed;
+				} catch {
+					// unreadable pidfile — treat as stale
+				}
+
+				// If stalePid is null (empty/malformed file), treat as alive to avoid racing
+				// a concurrent process that just created the file but hasn't written its pid yet
+				const alive = stalePid === null || this.isProcessAlive(stalePid);
+				if (!alive) {
+					// Stale pidfile — remove it and retry once
+					try {
+						unlinkSync(this.opts.paths.pidFile);
+					} catch {
+						// already removed by a concurrent process — that's fine
+					}
+					try {
+						this.pidFd = openSync(this.opts.paths.pidFile, "wx");
+						writeSync(this.pidFd, Buffer.from(`${process.pid}\n`));
+						this.ownsPidFile = true;
+					} catch (retryErr) {
+						const re = retryErr as NodeJS.ErrnoException;
+						if (re.code === "EEXIST") {
+							throw new Error(`daemon already running (pidfile ${this.opts.paths.pidFile})`);
+						}
+						throw retryErr;
+					}
+					return;
+				}
+
 				throw new Error(`daemon already running (pidfile ${this.opts.paths.pidFile})`);
 			}
-			throw err;
-		}
+		};
+		tryOpen();
 	}
 
 	private releasePidLock(): void {
@@ -122,12 +174,13 @@ export class Daemon {
 			}
 			this.pidFd = null;
 		}
-		if (existsSync(this.opts.paths.pidFile)) {
+		if (this.ownsPidFile && existsSync(this.opts.paths.pidFile)) {
 			try {
 				unlinkSync(this.opts.paths.pidFile);
 			} catch {
 				// ignore — next start's O_EXCL will handle it
 			}
+			this.ownsPidFile = false;
 		}
 	}
 
