@@ -45,9 +45,7 @@ export class IpcClient {
 				this.socket = s;
 				s.on("data", (chunk) => this.onData(chunk));
 				s.on("close", () => this.onClose());
-				s.on("error", () => {
-					// surfaced to pending callers; no additional handling here
-				});
+				s.on("error", (err) => this.onSocketError(err));
 				resolve();
 			});
 			s.once("error", reject);
@@ -64,7 +62,12 @@ export class IpcClient {
 		const p = new Promise<unknown>((resolve, reject) => {
 			this.pending.set(id, { resolve, reject });
 		});
-		this.socket.write(encodeFrame({ id, method, params }));
+		try {
+			this.socket.write(encodeFrame({ id, method, params }));
+		} catch (err) {
+			this.pending.delete(id);
+			throw err;
+		}
 		return p;
 	}
 
@@ -94,8 +97,20 @@ export class IpcClient {
 
 	private onClose(): void {
 		if (this.closed) return;
+		this.rejectAllPending({ code: "disconnected", message: "daemon closed socket" });
+	}
+
+	private onSocketError(err: Error): void {
+		if (this.closed) return;
+		this.rejectAllPending({
+			code: "socket_error",
+			message: err.message,
+		});
+	}
+
+	private rejectAllPending(err: IpcError): void {
 		for (const [, p] of this.pending) {
-			p.reject(new IpcRequestError({ code: "disconnected", message: "daemon closed socket" }));
+			p.reject(new IpcRequestError(err));
 		}
 		this.pending.clear();
 	}
