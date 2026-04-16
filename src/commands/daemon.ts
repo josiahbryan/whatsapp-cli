@@ -4,6 +4,8 @@ import { Daemon } from "../daemon/index.js";
 import { IpcClient } from "../ipc/client.js";
 import { envelopeOk, formatEnvelope } from "../util/json.js";
 import { accountPaths } from "../util/paths.js";
+import type { WhatsAppClient } from "../wa/client.js";
+import { FakeWhatsAppClient } from "../wa/fake-client.js";
 import { RealWhatsAppClient } from "../wa/real-client.js";
 import type { GlobalFlags } from "./types.js";
 
@@ -32,13 +34,17 @@ export async function runStart(args: Record<string, unknown>, flags: GlobalFlags
 		return;
 	}
 
+	const client: WhatsAppClient =
+		process.env.WA_CLI_FAKE_CLIENT === "1"
+			? new FakeWhatsAppClient()
+			: (new RealWhatsAppClient({
+					sessionDir: paths.sessionDir,
+					filesDir: paths.filesDir,
+				}) as unknown as WhatsAppClient);
 	const backfill = args.backfill ? Number.parseInt(String(args.backfill), 10) : 250;
 	const daemon = new Daemon({
 		paths,
-		client: new RealWhatsAppClient({
-			sessionDir: paths.sessionDir,
-			filesDir: paths.filesDir,
-		}),
+		client,
 		backfillLimitPerChat: backfill,
 	});
 	const shutdown = async (sig: string): Promise<void> => {
