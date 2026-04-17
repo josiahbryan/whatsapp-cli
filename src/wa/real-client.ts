@@ -1,6 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import * as qrcode from "qrcode";
+import { mkdirSync } from "node:fs";
 import { Client, LocalAuth, MessageMedia } from "whatsapp-web.js";
 import type {
 	ChatHandle,
@@ -60,15 +58,8 @@ export class RealWhatsAppClient implements WhatsAppClient {
 	}
 
 	private wireEvents(): void {
-		this.client.on("qr", async (qr: string) => {
-			const pngPath = join(this.opts.sessionDir, "..", "qr.png");
-			try {
-				const buf = await qrcode.toBuffer(qr, { type: "png" });
-				writeFileSync(pngPath, buf);
-				this.emit("qr", pngPath);
-			} catch {
-				this.emit("qr", qr);
-			}
+		this.client.on("qr", (qr: string) => {
+			this.emit("qr", qr);
 		});
 		this.client.on("authenticated", () => this.emit("authenticated"));
 		this.client.on("ready", () => this.emit("ready"));
@@ -163,7 +154,7 @@ export class RealWhatsAppClient implements WhatsAppClient {
 		return {
 			wa_id: mm.id._serialized,
 			chat_id: chatId,
-			from_id: fromMe ? mm.to : mm.from,
+			from_id: mm.from,
 			from_name: mm._data?.notifyName ?? null,
 			from_me: fromMe,
 			timestamp: mm.timestamp * 1000,

@@ -9,6 +9,7 @@ import {
 	writeFileSync,
 	writeSync,
 } from "node:fs";
+import * as qrcode from "qrcode";
 import { bumpChatUpdatedAt, upsertChat } from "../storage/chats.js";
 import { upsertContact } from "../storage/contacts.js";
 import { openDatabase } from "../storage/db.js";
@@ -190,8 +191,13 @@ export class Daemon {
 	private wireClientEvents(): void {
 		const { client } = this.opts;
 
-		client.on("qr", (dataUrl) => {
-			writeFileSync(this.opts.paths.qrPng, Buffer.from(dataUrl));
+		client.on("qr", (qrData) => {
+			void qrcode
+				.toBuffer(qrData, { type: "png" })
+				.then((png) => writeFileSync(this.opts.paths.qrPng, png))
+				.catch(() => {
+					// best-effort; qr.png write failure shouldn't block transition
+				});
 			if (this.sm.current === "starting") this.sm.transition("qr_required");
 		});
 		client.on("authenticated", () => {
