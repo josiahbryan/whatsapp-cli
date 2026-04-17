@@ -17,6 +17,8 @@ export interface SendResult {
 export interface ChatHandle {
 	id: string;
 	kind: "dm" | "group";
+	name?: string | null;
+	updated_at?: number;
 	fetchMessages(limit: number): Promise<WaMessageEvent[]>;
 }
 

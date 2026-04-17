@@ -1,12 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-	existsSync,
-	mkdtempSync,
-	readFileSync,
-	rmSync,
-	statSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileLogger } from "../../src/util/log.js";

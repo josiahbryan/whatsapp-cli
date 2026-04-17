@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
-import { bumpChatUpdatedAt } from "../storage/chats.js";
+import { bumpChatUpdatedAt, upsertChat } from "../storage/chats.js";
 import { insertMessage } from "../storage/messages.js";
-import type { WhatsAppClient } from "../wa/client.js";
+import type { ChatHandle, WhatsAppClient } from "../wa/client.js";
 import type { WaMessageEvent } from "../wa/events.js";
 
 export interface BackfillOpts {
@@ -14,22 +14,36 @@ export interface BackfillReport {
 	skipped: number;
 }
 
+function seedChats(db: Database, handles: ChatHandle[]): void {
+	db.transaction(() => {
+		for (const h of handles) {
+			const phone = h.id.endsWith("@c.us") ? (h.id.split("@")[0] ?? null) : null;
+			upsertChat(db, {
+				id: h.id,
+				kind: h.kind,
+				name: h.name ?? null,
+				phone,
+				updated_at: h.updated_at ?? Date.now(),
+			});
+		}
+	})();
+}
+
 export async function backfillChats(
 	db: Database,
 	client: WhatsAppClient,
 	opts: BackfillOpts,
 ): Promise<BackfillReport> {
 	const report: BackfillReport = { chats: 0, inserted: 0, skipped: 0 };
+
+	const handles = await client.listChats();
+	seedChats(db, handles);
+
 	if (opts.limitPerChat <= 0) return report;
 
-	const chatIds = (db.prepare("SELECT id FROM chats").all() as Array<{ id: string }>).map(
-		(r) => r.id,
-	);
-
-	for (const id of chatIds) {
+	for (const h of handles) {
 		report.chats += 1;
-		const handle = await client.getChatById(id);
-		const messages: WaMessageEvent[] = await handle.fetchMessages(opts.limitPerChat);
+		const messages: WaMessageEvent[] = await h.fetchMessages(opts.limitPerChat);
 		db.transaction(() => {
 			for (const m of messages) {
 				const inserted = insertMessage(db, {

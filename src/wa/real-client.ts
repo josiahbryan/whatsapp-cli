@@ -202,13 +202,21 @@ export class RealWhatsAppClient implements WhatsAppClient {
 		await this.client.initialize();
 	}
 
-	async getChatById(chat_id: string): Promise<ChatHandle> {
-		const chat = await this.client.getChatById(chat_id);
+	private toHandle(chat: unknown): ChatHandle {
+		const c = chat as {
+			id: { _serialized: string };
+			isGroup: boolean;
+			name?: string | null;
+			timestamp?: number;
+			fetchMessages: (opts: { limit: number }) => Promise<unknown[]>;
+		};
 		return {
-			id: chat.id._serialized,
-			kind: chat.isGroup ? "group" : "dm",
+			id: c.id._serialized,
+			kind: c.isGroup ? "group" : "dm",
+			name: c.name ?? null,
+			updated_at: typeof c.timestamp === "number" ? c.timestamp * 1000 : Date.now(),
 			fetchMessages: async (limit: number) => {
-				const messages = await chat.fetchMessages({ limit });
+				const messages = await c.fetchMessages({ limit });
 				return Promise.all(
 					messages.map((m) => this.toMessageEvent(m, Boolean((m as { fromMe?: boolean }).fromMe))),
 				);
@@ -216,9 +224,14 @@ export class RealWhatsAppClient implements WhatsAppClient {
 		};
 	}
 
+	async getChatById(chat_id: string): Promise<ChatHandle> {
+		const chat = await this.client.getChatById(chat_id);
+		return this.toHandle(chat);
+	}
+
 	async listChats(): Promise<ChatHandle[]> {
 		const chats = await this.client.getChats();
-		return Promise.all(chats.map((c) => this.getChatById(c.id._serialized)));
+		return chats.map((c) => this.toHandle(c));
 	}
 
 	async sendText(chat_id: string, text: string, opts: SendTextOpts = {}): Promise<SendResult> {

@@ -63,7 +63,7 @@ export class Daemon {
 		await this.opts.client.initialize();
 		await ready;
 
-		if (this.opts.backfillLimitPerChat > 0 && this.db) {
+		if (this.db) {
 			await backfillChats(this.db, this.opts.client, {
 				limitPerChat: this.opts.backfillLimitPerChat,
 			});
@@ -194,11 +194,15 @@ export class Daemon {
 		client.on("qr", (qrData) => {
 			void qrcode
 				.toBuffer(qrData, { type: "png" })
-				.then((png) => writeFileSync(this.opts.paths.qrPng, png))
+				.then((png) => {
+					writeFileSync(this.opts.paths.qrPng, png);
+				})
 				.catch(() => {
 					// best-effort; qr.png write failure shouldn't block transition
+				})
+				.finally(() => {
+					if (this.sm.current === "starting") this.sm.transition("qr_required");
 				});
-			if (this.sm.current === "starting") this.sm.transition("qr_required");
 		});
 		client.on("authenticated", () => {
 			if (this.sm.current === "starting" || this.sm.current === "qr_required") {

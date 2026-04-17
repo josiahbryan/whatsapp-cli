@@ -29,7 +29,10 @@ type AnyListener = (...args: never[]) => void;
 export class FakeWhatsAppClient implements WhatsAppClient {
 	private readonly listeners = new Map<keyof WaEventMap, AnyListener[]>();
 	private readonly history = new Map<string, WaMessageEvent[]>();
-	private readonly chatMeta = new Map<string, { kind: "dm" | "group" }>();
+	private readonly chatMeta = new Map<
+		string,
+		{ kind: "dm" | "group"; name?: string | null; updated_at?: number }
+	>();
 	private pairingResolver: (() => void) | null = null;
 	private sendCounter = 0;
 	public readonly sentMessages: SentMessage[] = [];
@@ -77,10 +80,16 @@ export class FakeWhatsAppClient implements WhatsAppClient {
 		r?.();
 	}
 
-	seedHistory(chat_id: string, messages: WaMessageEvent[]): void {
+	seedHistory(
+		chat_id: string,
+		messages: WaMessageEvent[],
+		meta?: { name?: string | null; updated_at?: number },
+	): void {
 		this.history.set(chat_id, messages);
 		this.chatMeta.set(chat_id, {
 			kind: chat_id.endsWith("@g.us") ? "group" : "dm",
+			name: meta?.name ?? null,
+			updated_at: meta?.updated_at,
 		});
 	}
 
@@ -111,6 +120,8 @@ export class FakeWhatsAppClient implements WhatsAppClient {
 		return {
 			id: chat_id,
 			kind: meta.kind,
+			name: meta.name ?? null,
+			updated_at: meta.updated_at,
 			fetchMessages: async (limit: number) => {
 				const all = this.history.get(chat_id) ?? [];
 				return all.slice(-limit);
