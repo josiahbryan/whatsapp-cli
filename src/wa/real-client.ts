@@ -208,20 +208,133 @@ export class RealWhatsAppClient implements WhatsAppClient {
 			isGroup: boolean;
 			name?: string | null;
 			timestamp?: number;
-			fetchMessages: (opts: { limit: number }) => Promise<unknown[]>;
 		};
+		const chatId = c.id._serialized;
 		return {
-			id: c.id._serialized,
+			id: chatId,
 			kind: c.isGroup ? "group" : "dm",
 			name: c.name ?? null,
 			updated_at: typeof c.timestamp === "number" ? c.timestamp * 1000 : Date.now(),
-			fetchMessages: async (limit: number) => {
-				const messages = await c.fetchMessages({ limit });
-				return Promise.all(
-					messages.map((m) => this.toMessageEvent(m, Boolean((m as { fromMe?: boolean }).fromMe))),
-				);
-			},
+			fetchMessages: (limit: number) => this.fetchMessagesViaStore(chatId, limit),
 		};
+	}
+
+	private async fetchMessagesViaStore(chatId: string, limit: number): Promise<WaMessageEvent[]> {
+		const page = (
+			this.client as unknown as {
+				pupPage?: {
+					evaluate: (
+						fn: (id: string, lim: number) => unknown,
+						id: string,
+						lim: number,
+					) => Promise<unknown>;
+				};
+			}
+		).pupPage;
+		if (!page) return [];
+		interface StoreMsgSnapshot {
+			wa_id: string;
+			chat_id: string;
+			from_id: string;
+			from_name: string | null;
+			from_me: boolean;
+			timestamp: number;
+			type: string;
+			body: string | null;
+			quoted_wa_id: string | null;
+			has_media: boolean;
+			mimetype: string | null;
+			filename: string | null;
+		}
+		const snaps = (await page.evaluate(
+			async (id: string, lim: number) => {
+				const w = globalThis as unknown as {
+					Store?: {
+						WidFactory?: { createWid: (s: string) => unknown };
+						Chat?: { get: (wid: unknown) => unknown };
+						ConversationMsgs?: {
+							loadEarlierMsgs: (chat: unknown, msgs: unknown) => Promise<unknown[]>;
+						};
+					};
+				};
+				const store = w.Store;
+				if (!store?.WidFactory || !store.Chat) return [];
+				const wid = store.WidFactory.createWid(id);
+				type M = {
+					id?: { _serialized?: string; fromMe?: boolean; remote?: { _serialized?: string } };
+					from?: { _serialized?: string };
+					to?: { _serialized?: string };
+					author?: { _serialized?: string };
+					t?: number;
+					type?: string;
+					body?: string;
+					caption?: string;
+					quotedStanzaID?: string;
+					quotedMsg?: { id?: { _serialized?: string } };
+					mediaObject?: unknown;
+					mimetype?: string;
+					filename?: string;
+					isNotification?: boolean;
+					notifyName?: string;
+				};
+				const chat = store.Chat.get(wid) as {
+					id?: { _serialized?: string };
+					msgs?: { getModelsArray: () => M[] };
+				} | null;
+				const chatIdSer = chat?.id?._serialized ?? id;
+				if (!chat?.msgs) return [];
+				const filter = (m: M) => !m.isNotification;
+				let msgs = chat.msgs.getModelsArray().filter(filter);
+				if (lim > 0 && store.ConversationMsgs) {
+					while (msgs.length < lim) {
+						const more = (await store.ConversationMsgs.loadEarlierMsgs(chat, chat.msgs).catch(
+							() => [],
+						)) as M[];
+						if (!more || more.length === 0) break;
+						msgs = [...more.filter(filter), ...msgs];
+					}
+				}
+				msgs = msgs.slice(-Math.max(1, lim));
+				const snap = (m: M) => {
+					const fromMe = Boolean(m.id?.fromMe);
+					const fromId = fromMe
+						? (m.from?._serialized ?? "")
+						: (m.author?._serialized ?? m.from?._serialized ?? "");
+					return {
+						wa_id: m.id?._serialized ?? "",
+						chat_id: chatIdSer,
+						from_id: fromId,
+						from_name: m.notifyName ?? null,
+						from_me: fromMe,
+						timestamp: (m.t ?? 0) * 1000,
+						type: m.type ?? "chat",
+						body: m.body ?? m.caption ?? null,
+						quoted_wa_id: m.quotedStanzaID ?? m.quotedMsg?.id?._serialized ?? null,
+						has_media: Boolean(m.mediaObject),
+						mimetype: m.mimetype ?? null,
+						filename: m.filename ?? null,
+					};
+				};
+				return msgs.map(snap);
+			},
+			chatId,
+			limit,
+		)) as StoreMsgSnapshot[];
+		return snaps.map((s) => ({
+			wa_id: s.wa_id,
+			chat_id: s.chat_id,
+			from_id: s.from_id,
+			from_name: s.from_name,
+			from_me: s.from_me,
+			timestamp: s.timestamp,
+			type: this.normalizeType(s.type),
+			body: s.body,
+			quoted_wa_id: s.quoted_wa_id,
+			attachment:
+				s.has_media && s.mimetype
+					? { mimetype: s.mimetype, filename: s.filename, data: Buffer.alloc(0) }
+					: null,
+		}));
 	}
 
 	async getChatById(chat_id: string): Promise<ChatHandle> {
