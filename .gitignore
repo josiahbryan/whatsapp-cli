@@ -9,3 +9,6 @@ coverage/
 .env.local
 *.log
 tmp/
+.wa-cli/
+.wwebjs_cache/
+.wwebjs_auth/

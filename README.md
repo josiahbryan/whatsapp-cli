@@ -2,7 +2,7 @@
 
 Command-line WhatsApp client for humans and agents. Query your message history, stream incoming messages, and send outbound — all through a persistent local daemon that mirrors your WhatsApp Web session into a local SQLite database.
 
-> **Status:** Pre-alpha. Not yet released.
+> **Status:** v0.1.0 — experimental. APIs and on-disk format may change before 1.0.
 
 ## Install
 
