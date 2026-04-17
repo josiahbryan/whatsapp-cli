@@ -27,7 +27,7 @@
 	"dependencies": {
 		"commander": "^12.1.0",
 		"qrcode": "^1.5.4",
-		"whatsapp-web.js": "^1.26.0"
+		"whatsapp-web.js": "github:timothydillan/whatsapp-web.js#fix/duplicate-events-and-bindings"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",

@@ -38,11 +38,12 @@ export class Daemon {
 	private db: Database | null = null;
 	private pidFd: number | null = null;
 	private ownsPidFile = false;
+	private readonly logger: FileLogger;
 
 	constructor(private readonly opts: DaemonOptions) {
 		this.server = new DaemonServer(opts.paths.socket);
-		const logger = new FileLogger({ path: opts.paths.logFile, maxBytes: 10 * 1024 * 1024 });
-		this.sm.onTransition((s) => logger.info("state", { state: s }));
+		this.logger = new FileLogger({ path: opts.paths.logFile, maxBytes: 10 * 1024 * 1024 });
+		this.sm.onTransition((s) => this.logger.info("state", { state: s }));
 		this.sm.onTransition((s) => this.onStateTransition(s));
 	}
 
@@ -64,9 +65,12 @@ export class Daemon {
 		await ready;
 
 		if (this.db) {
-			await backfillChats(this.db, this.opts.client, {
-				limitPerChat: this.opts.backfillLimitPerChat,
-			});
+			await backfillChats(
+				this.db,
+				this.opts.client,
+				{ limitPerChat: this.opts.backfillLimitPerChat },
+				this.logger,
+			);
 		}
 	}
 

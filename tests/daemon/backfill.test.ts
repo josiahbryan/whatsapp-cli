@@ -90,6 +90,35 @@ describe("backfillChats", () => {
 		}
 	});
 
+	test("isolates per-chat fetchMessages errors (counts failed, continues loop)", async () => {
+		const { db, cleanup } = tempDb();
+		try {
+			const client = new FakeWhatsAppClient();
+			client.seedHistory("ok@c.us", [mk("ok1", "ok@c.us", 1)], { name: "OK" });
+			client.seedHistory("bad@c.us", [], { name: "BAD" });
+			// Override bad chat's fetchMessages to throw
+			const origGetChat = client.getChatById.bind(client);
+			client.getChatById = async (id) => {
+				const h = await origGetChat(id);
+				if (id === "bad@c.us") {
+					return {
+						...h,
+						fetchMessages: async () => {
+							throw new Error("waitForChatLoading undefined");
+						},
+					};
+				}
+				return h;
+			};
+			const report = await backfillChats(db, client, { limitPerChat: 10 });
+			expect(report.chats).toBe(2);
+			expect(report.inserted).toBe(1);
+			expect(report.failed).toBe(1);
+		} finally {
+			cleanup();
+		}
+	});
+
 	test("dedupes against existing rows (INSERT OR IGNORE)", async () => {
 		const { db, cleanup } = tempDb();
 		try {
