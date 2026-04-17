@@ -1,6 +1,6 @@
 {
 	"name": "whatsapp-cli",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Command-line WhatsApp client for humans and agents — query, stream, send over a persistent local daemon.",
 	"license": "MIT",
 	"author": "Josiah Bryan <josiahbryan@gmail.com>",

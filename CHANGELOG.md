@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-16
+
+### Added
+
+- Incoming media is now persisted to `files/<sanitized-wa_id><ext>`; DB records the path on the `messages` row (closes a spec gap where `attachment_path` was always `null`).
+- `download <wa_id>` RPC + CLI command to backfill attachments for messages captured via the Store.Chat path (which delivers metadata only, no bytes).
+- `show <wa_id>` non-JSON output now prints an attachment line (path or `<not downloaded>` plus mime/filename).
+
+### Fixed
+
+- `daemon/index.ts` message handler no longer drops the media buffer emitted by `RealWhatsAppClient`.
+
 ## [0.1.0] - 2026-04-16
 
 ### Added
