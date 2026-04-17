@@ -1,4 +1,4 @@
-import { listChats } from "../storage/chats.js";
+import { getChatById } from "../storage/chats.js";
 import { openDatabase } from "../storage/db.js";
 import { getGroupParticipants } from "../storage/groups.js";
 import { NotFoundError } from "../util/errors.js";
@@ -15,7 +15,7 @@ export async function run(args: Args, flags: GlobalFlags): Promise<void> {
 	const paths = accountPaths(flags.account);
 	const db = openDatabase(paths.db, { readonly: true });
 	try {
-		const chat = listChats(db, {}).find((c) => c.id === chatId);
+		const chat = getChatById(db, chatId);
 		if (!chat || chat.kind !== "group") {
 			process.stdout.write(formatEnvelope(envelopeError("not_found", `no group for ${args.chat}`)));
 			throw new NotFoundError(`no group for ${args.chat}`);

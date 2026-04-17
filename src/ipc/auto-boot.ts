@@ -1,6 +1,29 @@
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
-import type { AccountPaths } from "../util/paths.js";
+import { spawn } from "node:child_process";
+import { existsSync, unlinkSync } from "node:fs";
+import { type AccountPaths, accountPaths } from "../util/paths.js";
+import { readLivePid } from "../util/pidfile.js";
 import { IpcClient } from "./client.js";
+
+export interface AccountFlags {
+	account: string;
+}
+
+export async function ensureDaemonForAccount(flags: AccountFlags): Promise<IpcClient> {
+	const paths = accountPaths(flags.account);
+	return ensureDaemon({
+		paths,
+		spawn: async () => {
+			const child = spawn(
+				process.execPath,
+				[process.argv[1] ?? "", "daemon", "start", "--account", flags.account],
+				{ detached: true, stdio: "ignore" },
+			);
+			child.unref();
+		},
+		timeoutMs: 30_000,
+		pollMs: 250,
+	});
+}
 
 export interface EnsureDaemonOpts {
 	paths: AccountPaths;
@@ -63,25 +86,16 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 function cleanupStale(paths: AccountPaths): void {
-	if (existsSync(paths.pidFile)) {
-		try {
-			const raw = readFileSync(paths.pidFile, "utf8").trim();
-			const pid = Number.parseInt(raw, 10);
-			if (!pid || !pidAlive(pid)) {
-				unlinkSync(paths.pidFile);
-				if (existsSync(paths.socket)) unlinkSync(paths.socket);
-			}
-		} catch {
-			// ignore — pidfile unreadable, daemon start will handle it
-		}
-	}
-}
-
-function pidAlive(pid: number): boolean {
+	if (!existsSync(paths.pidFile)) return;
+	if (readLivePid(paths.pidFile) !== null) return;
 	try {
-		process.kill(pid, 0);
-		return true;
+		unlinkSync(paths.pidFile);
 	} catch {
-		return false;
+		// already removed
+	}
+	try {
+		unlinkSync(paths.socket);
+	} catch {
+		// already removed or never existed
 	}
 }

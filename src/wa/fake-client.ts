@@ -1,3 +1,4 @@
+import { chatKindFromId } from "../util/chat-id.js";
 import type {
 	ChatHandle,
 	DownloadedMedia,
@@ -91,7 +92,7 @@ export class FakeWhatsAppClient implements WhatsAppClient {
 	): void {
 		this.history.set(chat_id, messages);
 		this.chatMeta.set(chat_id, {
-			kind: chat_id.endsWith("@g.us") ? "group" : "dm",
+			kind: chatKindFromId(chat_id),
 			name: meta?.name ?? null,
 			updated_at: meta?.updated_at,
 		});
@@ -118,9 +119,7 @@ export class FakeWhatsAppClient implements WhatsAppClient {
 	}
 
 	async getChatById(chat_id: string): Promise<ChatHandle> {
-		const meta = this.chatMeta.get(chat_id) ?? {
-			kind: chat_id.endsWith("@g.us") ? ("group" as const) : ("dm" as const),
-		};
+		const meta = this.chatMeta.get(chat_id) ?? { kind: chatKindFromId(chat_id) };
 		return {
 			id: chat_id,
 			kind: meta.kind,

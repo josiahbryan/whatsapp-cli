@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { bumpChatUpdatedAt, upsertChat } from "../storage/chats.js";
 import { insertMessage } from "../storage/messages.js";
+import { chatPhoneFromId } from "../util/chat-id.js";
 import type { ChatHandle, WhatsAppClient } from "../wa/client.js";
 import type { WaMessageEvent } from "../wa/events.js";
 
@@ -23,12 +24,11 @@ export interface BackfillLogger {
 function seedChats(db: Database, handles: ChatHandle[]): void {
 	db.transaction(() => {
 		for (const h of handles) {
-			const phone = h.id.endsWith("@c.us") ? (h.id.split("@")[0] ?? null) : null;
 			upsertChat(db, {
 				id: h.id,
 				kind: h.kind,
 				name: h.name ?? null,
-				phone,
+				phone: chatPhoneFromId(h.id),
 				updated_at: h.updated_at ?? Date.now(),
 			});
 		}

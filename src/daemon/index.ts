@@ -17,8 +17,11 @@ import { openDatabase } from "../storage/db.js";
 import { syncGroupParticipants } from "../storage/groups.js";
 import { getMessageByWaId, insertMessage, updateAttachmentPath } from "../storage/messages.js";
 import { applyReaction } from "../storage/reactions.js";
+import { chatKindFromId, chatPhoneFromId } from "../util/chat-id.js";
+import { RpcError } from "../util/errors.js";
 import { FileLogger } from "../util/log.js";
 import type { AccountPaths } from "../util/paths.js";
+import { isProcessAlive } from "../util/pidfile.js";
 import type { WhatsAppClient } from "../wa/client.js";
 import { backfillChats } from "./backfill.js";
 import { DaemonServer } from "./server.js";
@@ -111,19 +114,6 @@ export class Daemon {
 		this.server.broadcast({ event: "state", data: { state: s } });
 	}
 
-	private isProcessAlive(pid: number): boolean {
-		try {
-			process.kill(pid, 0);
-			// signal 0 succeeded — process exists
-			return true;
-		} catch (err) {
-			const e = err as NodeJS.ErrnoException;
-			// ESRCH: no such process — dead
-			// EPERM: process exists but we lack permission — treat as alive
-			return e.code !== "ESRCH";
-		}
-	}
-
 	private acquirePidLock(): void {
 		const tryOpen = (): void => {
 			try {
@@ -146,7 +136,7 @@ export class Daemon {
 
 				// If stalePid is null (empty/malformed file), treat as alive to avoid racing
 				// a concurrent process that just created the file but hasn't written its pid yet
-				const alive = stalePid === null || this.isProcessAlive(stalePid);
+				const alive = stalePid === null || isProcessAlive(stalePid);
 				if (!alive) {
 					// Stale pidfile — remove it and retry once
 					try {
@@ -183,11 +173,11 @@ export class Daemon {
 			}
 			this.pidFd = null;
 		}
-		if (this.ownsPidFile && existsSync(this.opts.paths.pidFile)) {
+		if (this.ownsPidFile) {
 			try {
 				unlinkSync(this.opts.paths.pidFile);
 			} catch {
-				// ignore — next start's O_EXCL will handle it
+				// already removed or next start's O_EXCL will handle it
 			}
 			this.ownsPidFile = false;
 		}
@@ -245,12 +235,11 @@ export class Daemon {
 				}
 			}
 			db.transaction(() => {
-				const phone = m.chat_id.endsWith("@c.us") ? (m.chat_id.split("@")[0] ?? null) : null;
 				upsertChat(db, {
 					id: m.chat_id,
-					kind: m.chat_id.endsWith("@g.us") ? "group" : "dm",
+					kind: chatKindFromId(m.chat_id),
 					name: null,
-					phone,
+					phone: chatPhoneFromId(m.chat_id),
 					updated_at: m.timestamp,
 				});
 				const rowid = insertMessage(db, {
@@ -307,168 +296,111 @@ export class Daemon {
 		});
 	}
 
-	private recordOutgoingText(
-		chat_id: string,
-		wa_id: string,
-		text: string,
-		timestamp: number,
-		reply_to?: string,
-	): number {
+	private recordOutgoing(msg: {
+		chat_id: string;
+		wa_id: string;
+		timestamp: number;
+		type: "chat" | "document";
+		body: string | null;
+		attachment_path: string | null;
+		reply_to?: string;
+	}): number {
 		const db = this.db;
 		if (!db) return 0;
 		let rowid = 0;
 		db.transaction(() => {
-			const phone = chat_id.endsWith("@c.us") ? (chat_id.split("@")[0] ?? null) : null;
 			upsertChat(db, {
-				id: chat_id,
-				kind: chat_id.endsWith("@g.us") ? "group" : "dm",
+				id: msg.chat_id,
+				kind: chatKindFromId(msg.chat_id),
 				name: null,
-				phone,
-				updated_at: timestamp,
+				phone: chatPhoneFromId(msg.chat_id),
+				updated_at: msg.timestamp,
 			});
 			const inserted = insertMessage(db, {
-				wa_id,
-				chat_id,
+				wa_id: msg.wa_id,
+				chat_id: msg.chat_id,
 				from_id: SELF_ID,
 				from_name: null,
 				from_me: 1,
-				timestamp,
-				type: "chat",
-				body: text,
-				quoted_wa_id: reply_to ?? null,
-				attachment_path: null,
+				timestamp: msg.timestamp,
+				type: msg.type,
+				body: msg.body,
+				quoted_wa_id: msg.reply_to ?? null,
+				attachment_path: msg.attachment_path,
 				attachment_mime: null,
 				attachment_filename: null,
 			});
-			bumpChatUpdatedAt(db, chat_id, timestamp);
+			bumpChatUpdatedAt(db, msg.chat_id, msg.timestamp);
 			if (inserted !== null) rowid = inserted;
 			else {
-				const existing = getMessageByWaId(db, wa_id);
+				const existing = getMessageByWaId(db, msg.wa_id);
 				rowid = existing?.rowid ?? 0;
 			}
 		})();
 		return rowid;
 	}
 
-	private recordOutgoingMedia(
-		chat_id: string,
-		wa_id: string,
-		file_path: string,
-		caption: string | undefined,
-		timestamp: number,
-		reply_to?: string,
-	): number {
-		const db = this.db;
-		if (!db) return 0;
-		let rowid = 0;
-		db.transaction(() => {
-			const phone = chat_id.endsWith("@c.us") ? (chat_id.split("@")[0] ?? null) : null;
-			upsertChat(db, {
-				id: chat_id,
-				kind: chat_id.endsWith("@g.us") ? "group" : "dm",
-				name: null,
-				phone,
-				updated_at: timestamp,
-			});
-			const inserted = insertMessage(db, {
-				wa_id,
-				chat_id,
-				from_id: SELF_ID,
-				from_name: null,
-				from_me: 1,
-				timestamp,
-				type: "document",
-				body: caption ?? null,
-				quoted_wa_id: reply_to ?? null,
-				attachment_path: file_path,
-				attachment_mime: null,
-				attachment_filename: null,
-			});
-			bumpChatUpdatedAt(db, chat_id, timestamp);
-			if (inserted !== null) rowid = inserted;
-			else {
-				const existing = getMessageByWaId(db, wa_id);
-				rowid = existing?.rowid ?? 0;
-			}
-		})();
-		return rowid;
+	private requireReady(): void {
+		if (this.sm.current !== "ready") {
+			throw new RpcError("not_ready", `daemon not ready: ${this.sm.current}`);
+		}
 	}
 
 	private registerHandlers(): void {
 		this.server.setHandlers({
 			status: async () => ({ state: this.sm.current, pid: process.pid }),
 			send: async (params) => {
-				if (this.sm.current !== "ready") {
-					throw Object.assign(new Error(`daemon not ready: ${this.sm.current}`), {
-						code: "not_ready",
-					});
-				}
+				this.requireReady();
 				let chat_id = String(params.chat_id);
 				if (chat_id === "me") {
 					const self = this.opts.client.getSelfJid();
-					if (!self) {
-						throw Object.assign(new Error("self jid not available yet"), {
-							code: "not_ready",
-						});
-					}
+					if (!self) throw new RpcError("not_ready", "self jid not available yet");
 					chat_id = self;
 				}
+				const replyTo = typeof params.reply_to === "string" ? params.reply_to : undefined;
 				if ("text" in params && typeof params.text === "string") {
-					const replyTo = typeof params.reply_to === "string" ? params.reply_to : undefined;
 					const res = await this.opts.client.sendText(chat_id, params.text, {
 						reply_to_wa_id: replyTo,
 					});
-					const rowid = this.recordOutgoingText(
+					const rowid = this.recordOutgoing({
 						chat_id,
-						res.wa_id,
-						params.text,
-						res.timestamp,
-						replyTo,
-					);
+						wa_id: res.wa_id,
+						timestamp: res.timestamp,
+						type: "chat",
+						body: params.text,
+						attachment_path: null,
+						reply_to: replyTo,
+					});
 					return { wa_id: res.wa_id, rowid };
 				}
 				if ("file_path" in params && typeof params.file_path === "string") {
 					const caption = typeof params.caption === "string" ? params.caption : undefined;
-					const replyTo = typeof params.reply_to === "string" ? params.reply_to : undefined;
 					const res = await this.opts.client.sendMedia(chat_id, {
 						file_path: params.file_path,
 						caption,
 						reply_to_wa_id: replyTo,
 					});
-					const rowid = this.recordOutgoingMedia(
+					const rowid = this.recordOutgoing({
 						chat_id,
-						res.wa_id,
-						params.file_path,
-						caption,
-						res.timestamp,
-						replyTo,
-					);
+						wa_id: res.wa_id,
+						timestamp: res.timestamp,
+						type: "document",
+						body: caption ?? null,
+						attachment_path: params.file_path,
+						reply_to: replyTo,
+					});
 					return { wa_id: res.wa_id, rowid };
 				}
-				throw Object.assign(new Error("send requires text or file_path"), {
-					code: "invalid_params",
-				});
+				throw new RpcError("invalid_params", "send requires text or file_path");
 			},
 			download: async (params) => {
-				if (this.sm.current !== "ready") {
-					throw Object.assign(new Error(`daemon not ready: ${this.sm.current}`), {
-						code: "not_ready",
-					});
-				}
+				this.requireReady();
 				const wa_id = String(params.wa_id ?? "");
-				if (!wa_id) {
-					throw Object.assign(new Error("download requires wa_id"), {
-						code: "invalid_params",
-					});
-				}
+				if (!wa_id) throw new RpcError("invalid_params", "download requires wa_id");
 				const db = this.db;
-				if (!db) {
-					throw Object.assign(new Error("database not open"), { code: "not_ready" });
-				}
+				if (!db) throw new RpcError("not_ready", "database not open");
 				const row = getMessageByWaId(db, wa_id);
-				if (!row) {
-					throw Object.assign(new Error(`unknown wa_id: ${wa_id}`), { code: "not_found" });
-				}
+				if (!row) throw new RpcError("not_found", `unknown wa_id: ${wa_id}`);
 				if (row.attachment_path) {
 					return {
 						wa_id,
@@ -479,9 +411,7 @@ export class Daemon {
 					};
 				}
 				const media = await this.opts.client.downloadMediaFor(wa_id);
-				if (!media) {
-					throw Object.assign(new Error(`no media for ${wa_id}`), { code: "no_media" });
-				}
+				if (!media) throw new RpcError("no_media", `no media for ${wa_id}`);
 				const path = saveAttachment(
 					this.opts.paths.filesDir,
 					wa_id,
@@ -503,11 +433,7 @@ export class Daemon {
 				};
 			},
 			react: async (params) => {
-				if (this.sm.current !== "ready") {
-					throw Object.assign(new Error(`daemon not ready: ${this.sm.current}`), {
-						code: "not_ready",
-					});
-				}
+				this.requireReady();
 				await this.opts.client.sendReaction(String(params.message_wa_id), String(params.emoji));
 				return null;
 			},

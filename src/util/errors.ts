@@ -1,3 +1,5 @@
+import { envelopeError, formatEnvelope } from "./json.js";
+
 export class CliError extends Error {
 	readonly code: string;
 	readonly exitCode: number;
@@ -28,4 +30,28 @@ export class InvalidQueryError extends CliError {
 		super("invalid_query", 2, message);
 		this.name = "InvalidQueryError";
 	}
+}
+
+export type RpcErrorCode =
+	| "not_ready"
+	| "not_found"
+	| "no_media"
+	| "invalid_params"
+	| "internal_error";
+
+export class RpcError extends Error {
+	readonly code: RpcErrorCode;
+	constructor(code: RpcErrorCode, message: string) {
+		super(message);
+		this.name = "RpcError";
+		this.code = code;
+	}
+}
+
+export function throwRpcEnvelopeError(err: unknown): never {
+	const e = err as { code?: string; message?: string };
+	const code = e.code ?? "error";
+	const message = e.message ?? String(err);
+	process.stdout.write(formatEnvelope(envelopeError(code, message)));
+	throw new CliError(code, code === "not_ready" ? 2 : 1, message);
 }

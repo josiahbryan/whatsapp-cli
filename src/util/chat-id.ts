@@ -27,3 +27,12 @@ export function parseChatId(id: string): ChatInfo {
 	if (WA_GROUP.test(id)) return { kind: "group", phone: null };
 	throw new Error(`cannot parse chat id: ${id}`);
 }
+
+export function chatKindFromId(id: string): "dm" | "group" {
+	return id.endsWith("@g.us") ? "group" : "dm";
+}
+
+export function chatPhoneFromId(id: string): string | null {
+	if (!id.endsWith("@c.us")) return null;
+	return id.split("@")[0] ?? null;
+}

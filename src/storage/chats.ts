@@ -48,6 +48,13 @@ export function listChats(db: Database, opts: ListChatsOpts): ChatRow[] {
 	return db.prepare(sql).all(params) as ChatRow[];
 }
 
+export function getChatById(db: Database, id: string): ChatRow | null {
+	const row = db
+		.prepare("SELECT id, kind, name, phone, updated_at FROM chats WHERE id = @id")
+		.get({ "@id": id }) as ChatRow | undefined;
+	return row ?? null;
+}
+
 export function bumpChatUpdatedAt(db: Database, chatId: string, timestamp: number): void {
 	db.prepare("UPDATE chats SET updated_at = @ts WHERE id = @id AND @ts > updated_at").run({
 		"@id": chatId,

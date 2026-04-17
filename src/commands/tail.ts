@@ -1,5 +1,4 @@
-import { spawn } from "node:child_process";
-import { ensureDaemon } from "../ipc/auto-boot.js";
+import { ensureDaemonForAccount } from "../ipc/auto-boot.js";
 import { openDatabase } from "../storage/db.js";
 import { getMaxRowid, listMessagesSinceRowid } from "../storage/messages.js";
 import { parsePositiveInt } from "../util/args.js";
@@ -41,19 +40,7 @@ export async function run(args: Args, flags: GlobalFlags): Promise<void> {
 		return;
 	}
 
-	const client = await ensureDaemon({
-		paths,
-		spawn: async () => {
-			const child = spawn(
-				process.execPath,
-				[process.argv[1] ?? "", "daemon", "start", "--account", flags.account],
-				{ detached: true, stdio: "ignore" },
-			);
-			child.unref();
-		},
-		timeoutMs: 30_000,
-		pollMs: 250,
-	});
+	const client = await ensureDaemonForAccount(flags);
 	try {
 		const seen = new Set<string>();
 		const buffered: EventData[] = [];
