@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-16
+
+### Changed
+
+- Internal refactor: consolidated duplicated infrastructure across commands and daemon (net −83 lines). New helpers: `src/util/pidfile.ts` (isProcessAlive + readLivePid), `ensureDaemonForAccount` in `ipc/auto-boot.ts`, `chatKindFromId` / `chatPhoneFromId` in `util/chat-id.ts`, `RpcError` + `throwRpcEnvelopeError` in `util/errors.ts`, `getChatById` in `storage/chats.ts`. Collapsed `recordOutgoingText` + `recordOutgoingMedia` into one `recordOutgoing`. No user-facing behavior change.
+
+### Fixed
+
+- `pnpm run build` now bakes the package version into the compiled binary (previously reported `0.1.0-dev` unless built via `scripts/release.sh`).
+
 ## [0.1.1] - 2026-04-16
 
 ### Added
