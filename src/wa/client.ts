@@ -22,12 +22,19 @@ export interface ChatHandle {
 	fetchMessages(limit: number): Promise<WaMessageEvent[]>;
 }
 
+export type DiagnosticLogger = (
+	msg: string,
+	fields?: Record<string, string | number | boolean>,
+) => void;
+
 export interface WhatsAppClient {
 	initialize(): Promise<void>;
 	on<K extends keyof WaEventMap>(event: K, listener: WaEventMap[K]): void;
 	off<K extends keyof WaEventMap>(event: K, listener: WaEventMap[K]): void;
 	getChatById(chat_id: string): Promise<ChatHandle>;
 	listChats(): Promise<ChatHandle[]>;
+	getSelfJid(): string | null;
+	setDiagnosticLogger?(fn: DiagnosticLogger): void;
 	sendText(chat_id: string, text: string, opts?: SendTextOpts): Promise<SendResult>;
 	sendMedia(chat_id: string, opts: SendMediaOpts): Promise<SendResult>;
 	sendReaction(message_wa_id: string, emoji: string): Promise<void>;

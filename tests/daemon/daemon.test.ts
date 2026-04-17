@@ -97,6 +97,39 @@ describe("Daemon", () => {
 		}
 	});
 
+	test("send with chat_id='me' resolves to client.getSelfJid()", async () => {
+		const root = mkdtempSync(join(tmpdir(), "wacli-daemon-"));
+		const paths = accountPaths("default", root);
+		const client = new FakeWhatsAppClient({ selfJid: "99999@c.us" });
+		const daemon = new Daemon({ paths, client, backfillLimitPerChat: 0 });
+		try {
+			await daemon.start();
+			await rpc(paths.socket, "send", { chat_id: "me", text: "note to self" });
+			expect(client.sentMessages).toHaveLength(1);
+			expect(client.sentMessages[0]?.chat_id).toBe("99999@c.us");
+		} finally {
+			await daemon.stop();
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("send with chat_id='me' errors not_ready when self jid unavailable", async () => {
+		const root = mkdtempSync(join(tmpdir(), "wacli-daemon-"));
+		const paths = accountPaths("default", root);
+		const client = new FakeWhatsAppClient(); // no selfJid configured
+		const daemon = new Daemon({ paths, client, backfillLimitPerChat: 0 });
+		try {
+			await daemon.start();
+			await expect(rpc(paths.socket, "send", { chat_id: "me", text: "hi" })).rejects.toEqual({
+				code: "not_ready",
+				message: expect.stringContaining("self jid"),
+			});
+		} finally {
+			await daemon.stop();
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
 	test("send before ready fails with not_ready", async () => {
 		const root = mkdtempSync(join(tmpdir(), "wacli-daemon-"));
 		const paths = accountPaths("default", root);

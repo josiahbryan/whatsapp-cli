@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { Client, LocalAuth, MessageMedia } from "whatsapp-web.js";
 import type {
 	ChatHandle,
+	DiagnosticLogger,
 	SendMediaOpts,
 	SendResult,
 	SendTextOpts,
@@ -23,6 +24,7 @@ export interface RealOpts {
 export class RealWhatsAppClient implements WhatsAppClient {
 	private readonly client: Client;
 	private listeners: { [K in keyof WaEventMap]?: Array<WaEventMap[K]> } = {};
+	private diag: DiagnosticLogger | null = null;
 
 	constructor(private readonly opts: RealOpts) {
 		mkdirSync(opts.sessionDir, { recursive: true });
@@ -64,6 +66,23 @@ export class RealWhatsAppClient implements WhatsAppClient {
 		this.client.on("authenticated", () => this.emit("authenticated"));
 		this.client.on("ready", () => this.emit("ready"));
 		this.client.on("disconnected", (reason: string) => this.emit("disconnected", reason));
+
+		// Diagnostic events (pair-flake investigation).
+		const c = this.client as unknown as {
+			on(event: string, listener: (...args: unknown[]) => void): unknown;
+		};
+		c.on("loading_screen", (percent: unknown, message: unknown) => {
+			this.diag?.("wa loading_screen", {
+				percent: Number(percent) || 0,
+				message: String(message ?? ""),
+			});
+		});
+		c.on("change_state", (state: unknown) => {
+			this.diag?.("wa change_state", { state: String(state ?? "") });
+		});
+		c.on("auth_failure", (message: unknown) => {
+			this.diag?.("wa auth_failure", { message: String(message ?? "") });
+		});
 
 		this.client.on("message", async (m) => {
 			this.emit("message", await this.toMessageEvent(m, false));
@@ -345,6 +364,15 @@ export class RealWhatsAppClient implements WhatsAppClient {
 	async listChats(): Promise<ChatHandle[]> {
 		const chats = await this.client.getChats();
 		return chats.map((c) => this.toHandle(c));
+	}
+
+	getSelfJid(): string | null {
+		const info = (this.client as unknown as { info?: { wid?: { _serialized?: string } } }).info;
+		return info?.wid?._serialized ?? null;
+	}
+
+	setDiagnosticLogger(fn: DiagnosticLogger): void {
+		this.diag = fn;
 	}
 
 	async sendText(chat_id: string, text: string, opts: SendTextOpts = {}): Promise<SendResult> {

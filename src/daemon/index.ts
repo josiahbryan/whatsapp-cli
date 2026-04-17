@@ -195,6 +195,8 @@ export class Daemon {
 	private wireClientEvents(): void {
 		const { client } = this.opts;
 
+		client.setDiagnosticLogger?.((msg, fields) => this.logger.info(msg, fields));
+
 		client.on("qr", (qrData) => {
 			void qrcode
 				.toBuffer(qrData, { type: "png" })
@@ -383,7 +385,16 @@ export class Daemon {
 						code: "not_ready",
 					});
 				}
-				const chat_id = String(params.chat_id);
+				let chat_id = String(params.chat_id);
+				if (chat_id === "me") {
+					const self = this.opts.client.getSelfJid();
+					if (!self) {
+						throw Object.assign(new Error("self jid not available yet"), {
+							code: "not_ready",
+						});
+					}
+					chat_id = self;
+				}
 				if ("text" in params && typeof params.text === "string") {
 					const replyTo = typeof params.reply_to === "string" ? params.reply_to : undefined;
 					const res = await this.opts.client.sendText(chat_id, params.text, {

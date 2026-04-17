@@ -15,6 +15,7 @@ import type {
 
 export interface FakeOptions {
 	needsQr?: boolean;
+	selfJid?: string;
 }
 
 export interface SentMessage {
@@ -131,6 +132,16 @@ export class FakeWhatsAppClient implements WhatsAppClient {
 
 	async listChats(): Promise<ChatHandle[]> {
 		return Promise.all(Array.from(this.chatMeta.keys()).map((id) => this.getChatById(id)));
+	}
+
+	getSelfJid(): string | null {
+		return this.opts.selfJid ?? null;
+	}
+
+	setDiagnosticLogger(
+		_fn: (msg: string, fields?: Record<string, string | number | boolean>) => void,
+	): void {
+		// fake client has no upstream diagnostics
 	}
 
 	async sendText(chat_id: string, text: string, opts: SendTextOpts = {}): Promise<SendResult> {

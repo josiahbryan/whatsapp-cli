@@ -137,6 +137,14 @@ async function main(argv: string[]): Promise<void> {
 			await run(opts, program.opts());
 		});
 
+	program
+		.command("status")
+		.description("alias for `daemon status`")
+		.action(async (opts) => {
+			const { runStatus } = await import("./commands/daemon.js");
+			await runStatus(opts, program.opts());
+		});
+
 	const daemonCmd = program.command("daemon").description("daemon lifecycle");
 	daemonCmd
 		.command("start")
