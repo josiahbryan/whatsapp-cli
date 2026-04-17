@@ -37,10 +37,10 @@ export async function runStart(args: Record<string, unknown>, flags: GlobalFlags
 	const client: WhatsAppClient =
 		process.env.WA_CLI_FAKE_CLIENT === "1"
 			? new FakeWhatsAppClient()
-			: (new RealWhatsAppClient({
+			: new RealWhatsAppClient({
 					sessionDir: paths.sessionDir,
 					filesDir: paths.filesDir,
-				}) as unknown as WhatsAppClient);
+				});
 	const backfill = args.backfill ? Number.parseInt(String(args.backfill), 10) : 250;
 	const daemon = new Daemon({
 		paths,
