@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, rmSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, unlinkSync } from "node:fs";
 import { ensureDaemon } from "../ipc/auto-boot.js";
 import { CliError } from "../util/errors.js";
 import { envelopeError, envelopeOk, formatEnvelope } from "../util/json.js";
@@ -11,6 +11,34 @@ export function wipeSession(paths: AccountPaths): void {
 	if (existsSync(paths.qrPng)) unlinkSync(paths.qrPng);
 }
 
+function isProcessAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (err) {
+		const e = err as NodeJS.ErrnoException;
+		return e.code !== "ESRCH";
+	}
+}
+
+async function waitForDaemonExit(paths: AccountPaths, timeoutMs: number): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (!existsSync(paths.pidFile)) return;
+		let pid: number | null = null;
+		try {
+			const raw = readFileSync(paths.pidFile, "utf8").trim();
+			const n = Number.parseInt(raw, 10);
+			if (Number.isFinite(n) && n > 0) pid = n;
+		} catch {
+			// pidfile vanished between existsSync and readFileSync — treat as gone
+			return;
+		}
+		if (pid === null || !isProcessAlive(pid)) return;
+		await new Promise((r) => setTimeout(r, 100));
+	}
+}
+
 export async function run(_args: Record<string, unknown>, flags: GlobalFlags): Promise<void> {
 	const paths = accountPaths(flags.account);
 
@@ -20,7 +48,10 @@ export async function run(_args: Record<string, unknown>, flags: GlobalFlags): P
 		// not running; fine
 	}
 
-	await new Promise((r) => setTimeout(r, 500));
+	// shutdown RPC returns before the old daemon's async stop() completes
+	// (Puppeteer teardown can take several seconds). Wait for the pidfile
+	// to clear so the new daemon's O_EXCL acquire doesn't race.
+	await waitForDaemonExit(paths, 15_000);
 	wipeSession(paths);
 
 	const child = spawn(
