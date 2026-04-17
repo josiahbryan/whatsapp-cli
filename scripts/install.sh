@@ -23,5 +23,16 @@ else
   sudo chmod 755 "$INSTALL_PATH"
 fi
 
+# Bun 1.3's --compile embeds an invalid ad-hoc signature (hash mismatch),
+# and macOS AMFI SIGKILLs any binary whose codesign check fails. Re-sign
+# ad-hoc on install so the binary can actually exec.
+if [ "$(uname -s)" = "Darwin" ] && command -v codesign >/dev/null 2>&1; then
+  if [ -w "$INSTALL_PATH" ]; then
+    codesign --sign - --force "$INSTALL_PATH"
+  else
+    sudo codesign --sign - --force "$INSTALL_PATH"
+  fi
+fi
+
 echo "[install] Installed whatsapp-cli to $INSTALL_PATH"
 "$INSTALL_PATH" --version

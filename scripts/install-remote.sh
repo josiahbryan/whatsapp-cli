@@ -69,6 +69,18 @@ else
   sudo chmod 755 "$INSTALL_PATH"
 fi
 
+# Bun 1.3's --compile embeds an invalid ad-hoc signature; macOS AMFI
+# SIGKILLs binaries that fail codesign verification. Re-sign ad-hoc so
+# the binary can exec. GitHub's download path also strips xattrs that
+# would have marked it quarantined.
+if [ "$PLATFORM" = "darwin" ] && command -v codesign >/dev/null 2>&1; then
+  if [ -w "$INSTALL_PATH" ]; then
+    codesign --sign - --force "$INSTALL_PATH"
+  else
+    sudo codesign --sign - --force "$INSTALL_PATH"
+  fi
+fi
+
 echo "[install] Installed whatsapp-cli to $INSTALL_PATH"
 
 VERSION=$("$INSTALL_PATH" --version 2>/dev/null || true)

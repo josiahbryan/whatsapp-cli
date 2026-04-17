@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-04-16
+
+### Fixed
+
+- Compiled binaries now exec on macOS. Bun 1.3's `--compile` writes an ad-hoc signature whose embedded hash does not match the final file, so macOS AMFI SIGKILLs the binary at exec. `scripts/release.sh`, `scripts/install.sh`, `scripts/install-remote.sh`, and `pnpm run build` now re-sign (`codesign --sign - --force`) every macOS binary post-build.
+- `daemon start` (and `pair`, auto-boot) now spawn the detached child correctly from a compiled binary. In a bun-compiled binary, `process.argv[1]` is the virtual `/$bunfs/root/whatsapp-cli` path; passing it to the child made commander reject it as an unknown command and exit immediately. New `src/util/bun-spawn.ts:selfSpawnArgs()` skips argv[1] when running from bunfs.
+
 ## [0.1.2] - 2026-04-16
 
 ### Changed

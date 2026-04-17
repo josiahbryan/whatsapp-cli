@@ -46,6 +46,18 @@ for entry in "${TARGETS[@]}"; do
     --define "WA_CLI_VERSION=\"$VERSION_NUM\"" \
     --outfile "$DIST_DIR/$OUTPUT" \
     "$SRC"
+
+  # Bun 1.3's --compile writes an ad-hoc signature, but the embedded hash
+  # does not match the final file, so macOS AMFI SIGKILLs the binary at
+  # exec. Re-sign (ad-hoc) on Darwin build hosts so downloaders don't have
+  # to. Linux binaries don't use codesign.
+  case "$TARGET" in
+    bun-darwin-*)
+      if command -v codesign >/dev/null 2>&1; then
+        codesign --sign - --force "$DIST_DIR/$OUTPUT"
+      fi
+      ;;
+  esac
 done
 
 echo ""

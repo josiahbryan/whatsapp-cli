@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { Daemon } from "../daemon/index.js";
 import { IpcClient } from "../ipc/client.js";
+import { selfSpawnArgs } from "../util/bun-spawn.js";
 import { envelopeOk, formatEnvelope } from "../util/json.js";
 import { accountPaths } from "../util/paths.js";
 import type { WhatsAppClient } from "../wa/client.js";
@@ -26,7 +27,7 @@ export async function runStart(args: Record<string, unknown>, flags: GlobalFlags
 	if (!args.foreground) {
 		const child = spawn(
 			process.execPath,
-			[process.argv[1] ?? "", "daemon", "start", "--foreground", "--account", flags.account],
+			selfSpawnArgs(["daemon", "start", "--foreground", "--account", flags.account]),
 			{ detached: true, stdio: "ignore" },
 		);
 		child.unref();

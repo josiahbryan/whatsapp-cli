@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, unlinkSync } from "node:fs";
+import { selfSpawnArgs } from "../util/bun-spawn.js";
 import { type AccountPaths, accountPaths } from "../util/paths.js";
 import { readLivePid } from "../util/pidfile.js";
 import { IpcClient } from "./client.js";
@@ -15,7 +16,7 @@ export async function ensureDaemonForAccount(flags: AccountFlags): Promise<IpcCl
 		spawn: async () => {
 			const child = spawn(
 				process.execPath,
-				[process.argv[1] ?? "", "daemon", "start", "--account", flags.account],
+				selfSpawnArgs(["daemon", "start", "--account", flags.account]),
 				{ detached: true, stdio: "ignore" },
 			);
 			child.unref();

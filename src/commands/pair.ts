@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, rmSync, unlinkSync } from "node:fs";
 import { ensureDaemon } from "../ipc/auto-boot.js";
+import { selfSpawnArgs } from "../util/bun-spawn.js";
 import { CliError } from "../util/errors.js";
 import { envelopeError, envelopeOk, formatEnvelope } from "../util/json.js";
 import { type AccountPaths, accountPaths } from "../util/paths.js";
@@ -37,7 +38,7 @@ export async function run(_args: Record<string, unknown>, flags: GlobalFlags): P
 
 	const child = spawn(
 		process.execPath,
-		[process.argv[1] ?? "", "daemon", "start", "--account", flags.account],
+		selfSpawnArgs(["daemon", "start", "--account", flags.account]),
 		{ detached: true, stdio: "ignore" },
 	);
 	child.unref();
