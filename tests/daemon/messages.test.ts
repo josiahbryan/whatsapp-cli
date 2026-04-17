@@ -9,6 +9,7 @@ import {
 	insertMessage,
 	listMessagesByChat,
 	listMessagesSinceRowid,
+	updateAttachmentPath,
 } from "../../src/storage/messages.js";
 
 function tempDb() {
@@ -108,6 +109,53 @@ describe("messages storage", () => {
 			insertMessage(db, msg(7));
 			const found = getMessageByWaId(db, "w7");
 			expect(found?.body).toBe("hello 7");
+		} finally {
+			cleanup();
+		}
+	});
+
+	test("updateAttachmentPath patches path + mime + filename", () => {
+		const { db, cleanup } = tempDb();
+		try {
+			insertMessage(db, msg(9));
+			const changed = updateAttachmentPath(db, "w9", {
+				path: "/tmp/files/w9.jpg",
+				mime: "image/jpeg",
+				filename: "photo.jpg",
+			});
+			expect(changed).toBe(true);
+			const found = getMessageByWaId(db, "w9");
+			expect(found?.attachment_path).toBe("/tmp/files/w9.jpg");
+			expect(found?.attachment_mime).toBe("image/jpeg");
+			expect(found?.attachment_filename).toBe("photo.jpg");
+		} finally {
+			cleanup();
+		}
+	});
+
+	test("updateAttachmentPath preserves existing mime/filename when omitted", () => {
+		const { db, cleanup } = tempDb();
+		try {
+			insertMessage(db, {
+				...msg(10),
+				attachment_mime: "image/png",
+				attachment_filename: "orig.png",
+			});
+			updateAttachmentPath(db, "w10", { path: "/tmp/w10.png" });
+			const found = getMessageByWaId(db, "w10");
+			expect(found?.attachment_path).toBe("/tmp/w10.png");
+			expect(found?.attachment_mime).toBe("image/png");
+			expect(found?.attachment_filename).toBe("orig.png");
+		} finally {
+			cleanup();
+		}
+	});
+
+	test("updateAttachmentPath returns false for unknown wa_id", () => {
+		const { db, cleanup } = tempDb();
+		try {
+			const changed = updateAttachmentPath(db, "missing", { path: "/tmp/x" });
+			expect(changed).toBe(false);
 		} finally {
 			cleanup();
 		}

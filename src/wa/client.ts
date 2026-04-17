@@ -14,6 +14,12 @@ export interface SendResult {
 	timestamp: number;
 }
 
+export interface DownloadedMedia {
+	mimetype: string;
+	filename: string | null;
+	data: Buffer;
+}
+
 export interface ChatHandle {
 	id: string;
 	kind: "dm" | "group";
@@ -38,5 +44,6 @@ export interface WhatsAppClient {
 	sendText(chat_id: string, text: string, opts?: SendTextOpts): Promise<SendResult>;
 	sendMedia(chat_id: string, opts: SendMediaOpts): Promise<SendResult>;
 	sendReaction(message_wa_id: string, emoji: string): Promise<void>;
+	downloadMediaFor(message_wa_id: string): Promise<DownloadedMedia | null>;
 	destroy(): Promise<void>;
 }

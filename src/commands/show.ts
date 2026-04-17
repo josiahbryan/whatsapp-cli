@@ -31,6 +31,11 @@ export async function run(args: Args, flags: GlobalFlags): Promise<void> {
 		const ts = new Date(m.timestamp).toISOString();
 		process.stdout.write(`${ts}\t${m.wa_id}\t${m.from_name ?? m.from_id}\n`);
 		process.stdout.write(`${m.body ?? `<${m.type}>`}\n`);
+		if (m.attachment_path || m.attachment_mime || m.attachment_filename) {
+			const label = m.attachment_path ?? "<not downloaded>";
+			const meta = [m.attachment_mime, m.attachment_filename].filter(Boolean).join(" ");
+			process.stdout.write(`  📎 ${label}${meta ? ` (${meta})` : ""}\n`);
+		}
 		if (quoted)
 			process.stdout.write(`  ↳ quoted ${quoted.wa_id}: ${quoted.body ?? `<${quoted.type}>`}\n`);
 		for (const r of reactions) process.stdout.write(`  ${r.reactor_id}: ${r.emoji}\n`);

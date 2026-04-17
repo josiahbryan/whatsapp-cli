@@ -13,6 +13,7 @@ export interface MethodHandlers {
 	status(params: Record<string, unknown>, ctx: ClientContext): Promise<unknown>;
 	send(params: Record<string, unknown>, ctx: ClientContext): Promise<unknown>;
 	react(params: Record<string, unknown>, ctx: ClientContext): Promise<unknown>;
+	download(params: Record<string, unknown>, ctx: ClientContext): Promise<unknown>;
 	subscribe(params: Record<string, unknown>, ctx: ClientContext): Promise<unknown>;
 	unsubscribe(params: Record<string, unknown>, ctx: ClientContext): Promise<unknown>;
 	shutdown(params: Record<string, unknown>, ctx: ClientContext): Promise<unknown>;

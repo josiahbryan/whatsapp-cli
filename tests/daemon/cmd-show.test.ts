@@ -120,6 +120,69 @@ describe("show command", () => {
 		}
 	});
 
+	test("non-JSON output includes attachment line when set", async () => {
+		const { root, cleanup } = seed();
+		try {
+			process.env.WA_CLI_HOME = root;
+			const db = openDatabase(accountPaths("default", root).db);
+			insertMessage(db, {
+				wa_id: "withmedia",
+				chat_id: "a@c.us",
+				from_id: "1@c.us",
+				from_name: "A",
+				from_me: 0,
+				timestamp: 7,
+				type: "image",
+				body: null,
+				quoted_wa_id: null,
+				attachment_path: "/tmp/files/withmedia.jpg",
+				attachment_mime: "image/jpeg",
+				attachment_filename: null,
+			});
+			db.close();
+			const out = await captureStdout(() =>
+				run({ waId: "withmedia" }, { json: false, account: "default" }),
+			);
+			expect(out).toContain("/tmp/files/withmedia.jpg");
+			expect(out).toContain("image/jpeg");
+		} finally {
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
+			cleanup();
+		}
+	});
+
+	test("non-JSON output shows <not downloaded> when mime but no path", async () => {
+		const { root, cleanup } = seed();
+		try {
+			process.env.WA_CLI_HOME = root;
+			const db = openDatabase(accountPaths("default", root).db);
+			insertMessage(db, {
+				wa_id: "nomedia",
+				chat_id: "a@c.us",
+				from_id: "1@c.us",
+				from_name: "A",
+				from_me: 0,
+				timestamp: 8,
+				type: "image",
+				body: null,
+				quoted_wa_id: null,
+				attachment_path: null,
+				attachment_mime: "image/jpeg",
+				attachment_filename: null,
+			});
+			db.close();
+			const out = await captureStdout(() =>
+				run({ waId: "nomedia" }, { json: false, account: "default" }),
+			);
+			expect(out).toContain("<not downloaded>");
+		} finally {
+			// biome-ignore lint/performance/noDelete: test cleanup needs real removal, not a string assignment
+			delete process.env.WA_CLI_HOME;
+			cleanup();
+		}
+	});
+
 	test("not found → success:false with code=not_found", async () => {
 		const { root, cleanup } = seed();
 		try {

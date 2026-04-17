@@ -10,11 +10,12 @@ import {
 	writeSync,
 } from "node:fs";
 import * as qrcode from "qrcode";
+import { saveAttachment } from "../storage/attachments.js";
 import { bumpChatUpdatedAt, upsertChat } from "../storage/chats.js";
 import { upsertContact } from "../storage/contacts.js";
 import { openDatabase } from "../storage/db.js";
 import { syncGroupParticipants } from "../storage/groups.js";
-import { getMessageByWaId, insertMessage } from "../storage/messages.js";
+import { getMessageByWaId, insertMessage, updateAttachmentPath } from "../storage/messages.js";
 import { applyReaction } from "../storage/reactions.js";
 import { FileLogger } from "../util/log.js";
 import type { AccountPaths } from "../util/paths.js";
@@ -226,6 +227,23 @@ export class Daemon {
 		client.on("message", (m) => {
 			const db = this.db;
 			if (!db) return;
+			let attachmentPath: string | null = null;
+			if (m.attachment?.data && m.attachment.data.byteLength > 0) {
+				try {
+					attachmentPath = saveAttachment(
+						this.opts.paths.filesDir,
+						m.wa_id,
+						m.attachment.data,
+						m.attachment.mimetype,
+						m.attachment.filename,
+					);
+				} catch (err) {
+					this.logger.info("attachment save failed", {
+						wa_id: m.wa_id,
+						error: err instanceof Error ? err.message : String(err),
+					});
+				}
+			}
 			db.transaction(() => {
 				const phone = m.chat_id.endsWith("@c.us") ? (m.chat_id.split("@")[0] ?? null) : null;
 				upsertChat(db, {
@@ -245,7 +263,7 @@ export class Daemon {
 					type: m.type,
 					body: m.body,
 					quoted_wa_id: m.quoted_wa_id,
-					attachment_path: null,
+					attachment_path: attachmentPath,
 					attachment_mime: m.attachment?.mimetype ?? null,
 					attachment_filename: m.attachment?.filename ?? null,
 				});
@@ -430,6 +448,59 @@ export class Daemon {
 				throw Object.assign(new Error("send requires text or file_path"), {
 					code: "invalid_params",
 				});
+			},
+			download: async (params) => {
+				if (this.sm.current !== "ready") {
+					throw Object.assign(new Error(`daemon not ready: ${this.sm.current}`), {
+						code: "not_ready",
+					});
+				}
+				const wa_id = String(params.wa_id ?? "");
+				if (!wa_id) {
+					throw Object.assign(new Error("download requires wa_id"), {
+						code: "invalid_params",
+					});
+				}
+				const db = this.db;
+				if (!db) {
+					throw Object.assign(new Error("database not open"), { code: "not_ready" });
+				}
+				const row = getMessageByWaId(db, wa_id);
+				if (!row) {
+					throw Object.assign(new Error(`unknown wa_id: ${wa_id}`), { code: "not_found" });
+				}
+				if (row.attachment_path) {
+					return {
+						wa_id,
+						path: row.attachment_path,
+						mime: row.attachment_mime,
+						filename: row.attachment_filename,
+						cached: true,
+					};
+				}
+				const media = await this.opts.client.downloadMediaFor(wa_id);
+				if (!media) {
+					throw Object.assign(new Error(`no media for ${wa_id}`), { code: "no_media" });
+				}
+				const path = saveAttachment(
+					this.opts.paths.filesDir,
+					wa_id,
+					media.data,
+					media.mimetype,
+					media.filename,
+				);
+				updateAttachmentPath(db, wa_id, {
+					path,
+					mime: media.mimetype,
+					filename: media.filename,
+				});
+				return {
+					wa_id,
+					path,
+					mime: media.mimetype,
+					filename: media.filename,
+					cached: false,
+				};
 			},
 			react: async (params) => {
 				if (this.sm.current !== "ready") {

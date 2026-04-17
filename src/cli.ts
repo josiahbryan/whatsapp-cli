@@ -109,6 +109,14 @@ async function main(argv: string[]): Promise<void> {
 		});
 
 	program
+		.command("download <wa_id>")
+		.description("download attachment for a message to the files dir")
+		.action(async (waId, opts) => {
+			const { run } = await import("./commands/download.js");
+			await run({ waId, ...opts }, program.opts());
+		});
+
+	program
 		.command("react <wa_id> [emoji]")
 		.description("add or remove a reaction (empty emoji removes)")
 		.option("--emoji <emoji>", "explicit emoji (overrides positional)")

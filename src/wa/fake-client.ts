@@ -1,5 +1,6 @@
 import type {
 	ChatHandle,
+	DownloadedMedia,
 	SendMediaOpts,
 	SendResult,
 	SendTextOpts,
@@ -34,10 +35,12 @@ export class FakeWhatsAppClient implements WhatsAppClient {
 		string,
 		{ kind: "dm" | "group"; name?: string | null; updated_at?: number }
 	>();
+	private readonly mediaByWaId = new Map<string, DownloadedMedia>();
 	private pairingResolver: (() => void) | null = null;
 	private sendCounter = 0;
 	public readonly sentMessages: SentMessage[] = [];
 	public readonly sentReactions: Array<{ message_wa_id: string; emoji: string }> = [];
+	public readonly downloadCalls: string[] = [];
 	public destroyed = false;
 
 	constructor(private readonly opts: FakeOptions = {}) {}
@@ -166,6 +169,15 @@ export class FakeWhatsAppClient implements WhatsAppClient {
 
 	async sendReaction(message_wa_id: string, emoji: string): Promise<void> {
 		this.sentReactions.push({ message_wa_id, emoji });
+	}
+
+	seedMedia(message_wa_id: string, media: DownloadedMedia): void {
+		this.mediaByWaId.set(message_wa_id, media);
+	}
+
+	async downloadMediaFor(message_wa_id: string): Promise<DownloadedMedia | null> {
+		this.downloadCalls.push(message_wa_id);
+		return this.mediaByWaId.get(message_wa_id) ?? null;
 	}
 
 	async destroy(): Promise<void> {

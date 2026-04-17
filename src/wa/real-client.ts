@@ -3,6 +3,7 @@ import { Client, LocalAuth, MessageMedia } from "whatsapp-web.js";
 import type {
 	ChatHandle,
 	DiagnosticLogger,
+	DownloadedMedia,
 	SendMediaOpts,
 	SendResult,
 	SendTextOpts,
@@ -389,6 +390,29 @@ export class RealWhatsAppClient implements WhatsAppClient {
 		if (opts.reply_to_wa_id) sendOpts.quotedMessageId = opts.reply_to_wa_id;
 		const m = await this.client.sendMessage(chat_id, media, sendOpts);
 		return { wa_id: m.id._serialized, timestamp: m.timestamp * 1000 };
+	}
+
+	async downloadMediaFor(message_wa_id: string): Promise<DownloadedMedia | null> {
+		const c = this.client as unknown as {
+			getMessageById?: (id: string) => Promise<{
+				hasMedia?: boolean;
+				downloadMedia?: () => Promise<{
+					data: string;
+					mimetype: string;
+					filename?: string;
+				} | null>;
+			} | null>;
+		};
+		if (!c.getMessageById) return null;
+		const msg = await c.getMessageById(message_wa_id);
+		if (!msg?.hasMedia || !msg.downloadMedia) return null;
+		const media = await msg.downloadMedia();
+		if (!media?.data) return null;
+		return {
+			mimetype: media.mimetype,
+			filename: media.filename ?? null,
+			data: Buffer.from(media.data, "base64"),
+		};
 	}
 
 	async sendReaction(message_wa_id: string, emoji: string): Promise<void> {

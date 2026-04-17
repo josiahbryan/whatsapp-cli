@@ -45,6 +45,34 @@ export function insertMessage(db: Database, m: NewMessage): number | null {
 	return info.changes > 0 ? Number(info.lastInsertRowid) : null;
 }
 
+export interface AttachmentUpdate {
+	path: string;
+	mime?: string | null;
+	filename?: string | null;
+}
+
+export function updateAttachmentPath(
+	db: Database,
+	wa_id: string,
+	update: AttachmentUpdate,
+): boolean {
+	const info = db
+		.prepare(
+			`UPDATE messages SET
+			   attachment_path = @path,
+			   attachment_mime = COALESCE(@mime, attachment_mime),
+			   attachment_filename = COALESCE(@filename, attachment_filename)
+			 WHERE wa_id = @wa_id`,
+		)
+		.run({
+			"@wa_id": wa_id,
+			"@path": update.path,
+			"@mime": update.mime ?? null,
+			"@filename": update.filename ?? null,
+		});
+	return info.changes > 0;
+}
+
 export function getMaxRowid(db: Database): number {
 	const row = db.prepare("SELECT COALESCE(MAX(rowid), 0) AS m FROM messages").get() as {
 		m: number;
